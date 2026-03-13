@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "public/**", "use": "@vercel/static" },
+    { "src": "api/*.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/optimize", "dest": "/api/optimize.py" },
+    { "src": "/api/pumps",    "dest": "/api/pumps.py" },
+    { "src": "/api/physics",  "dest": "/api/physics.py" },
+    { "src": "/api/history",  "dest": "/api/history.py" },
+    { "src": "/api/pareto",   "dest": "/api/pareto.py" },
+    { "src": "/api/schedule", "dest": "/api/schedule.py" },
+    { "src": "/transitions.js", "dest": "/public/transitions.js" },
+    { "src": "/(.*)\\.html", "dest": "/public/$1.html" },
+    { "src": "/", "dest": "/public/index.html" }
+  ]
+}

@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>排程詳情 — 台水 AI 調度系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --accent: #10b981;
+      --glass-bg: #ffffff;
+      --glass-border: #e2e8f0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: #1e293b;
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top Bar ── */
+    .top-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: #1a3566;
+      border-bottom: 3px solid #10b981;
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .top-bar .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .top-bar .logo svg {
+      width: 22px; height: 22px;
+    }
+    .top-bar .system-tag {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.60);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .top-bar .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+    /* ── Bottom Nav ── */
+    .bottom-nav {
+      position: sticky;
+      bottom: 0;
+      z-index: 50;
+      background: #1a3566;
+      
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      height: 60px;
+      flex-shrink: 0;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      text-decoration: none;
+      color: rgba(255,255,255,0.60);
+      font-size: 0.65rem;
+      letter-spacing: 0.04em;
+      transition: color 0.2s;
+      padding: 0 0.5rem;
+      cursor: pointer;
+    }
+    .nav-item svg { width: 18px; height: 18px; }
+    .nav-item.active { color: var(--accent); }
+    .nav-item:hover { color: rgba(255,255,255,0.90); }
+    .nav-item.active:hover { color: var(--accent); }
+
+    /* ── Main Content ── */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* ── Glass Card ── */
+    .glass-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      
+    }
+
+    /* ── Controls Bar ── */
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .controls-bar input[type="date"] {
+      background: #f8fafc;
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: #1e293b;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.85rem;
+      outline: none;
+      font-family: system-ui;
+    }
+    .controls-bar input[type="date"]:focus {
+      border-color: var(--accent);
+    }
+    .controls-bar input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.7);
+    }
+    .btn {
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: system-ui;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-accent { background: var(--accent); color: #000; }
+    .btn-accent:hover { opacity: 0.88; }
+    .btn-outline {
+      background: #f8fafc;
+      border: 1px solid var(--glass-border);
+      color: #64748b;
+    }
+    .btn-outline:hover { background: #f1f5f9; color: #1e293b; }
+    .loading-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid #e2e8f0;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Section Title ── */
+    .section-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Metric Cards ── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.75rem;
+    }
+    @media (max-width: 900px) {
+      .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 560px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .metric-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .metric-label {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+    }
+    .metric-value {
+      font-size: 1.65rem;
+      font-weight: 700;
+      font-family: 'Courier New', Courier, monospace;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+    .metric-unit {
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+    .metric-delta {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .metric-delta.positive { color: #10b981; }
+    .metric-delta.negative { color: #f87171; }
+
+    /* ── Gantt Chart ── */
+    .gantt-wrapper {
+      overflow-x: auto;
+    }
+    .gantt-container {
+      min-width: 900px;
+    }
+    .gantt-header {
+      display: grid;
+      grid-template-columns: 80px repeat(24, 1fr);
+      gap: 2px;
+      margin-bottom: 2px;
+    }
+    .gantt-hour-label {
+      text-align: center;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      font-family: 'Courier New', Courier, monospace;
+      padding: 4px 0;
+      position: relative;
+    }
+    .gantt-row {
+      display: grid;
+      grid-template-columns: 80px repeat(24, 1fr);
+      gap: 2px;
+      margin-bottom: 2px;
+    }
+    .gantt-pump-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      padding-right: 8px;
+      justify-content: flex-end;
+    }
+    .gantt-cell {
+      height: 52px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.68rem;
+      font-family: 'Courier New', Courier, monospace;
+      color: #1e293b;
+      cursor: default;
+      transition: filter 0.15s;
+      position: relative;
+      border: 1px solid #e2e8f0;
+    }
+    .gantt-cell:hover {
+      filter: brightness(1.4);
+      z-index: 10;
+    }
+    /* TOU overlay */
+    .gantt-cell.tou-peak     { box-shadow: inset 0 0 0 1px rgba(239,68,68,0.3); }
+    .gantt-cell.tou-semi     { box-shadow: inset 0 0 0 1px rgba(245,158,11,0.3); }
+    .gantt-cell.tou-offpeak  { box-shadow: inset 0 0 0 1px rgba(16,185,129,0.15); }
+    /* TOU column background via header marker */
+    .tou-peak-bg  { color: #f87171 !important; }
+    .tou-semi-bg  { color: #fbbf24 !important; }
+    .tou-off-bg   { color: #10b981 !important; }
+
+    /* Gantt tooltip */
+    .gantt-cell::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a3566;
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.65rem;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      color: #1e293b;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    .gantt-cell:hover::after { opacity: 1; }
+
+    /* ── TOU Legend ── */
+    .tou-legend {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.82rem;
+      color: #94a3b8;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+    }
+
+    /* Hz legend */
+    .hz-legend {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .hz-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    .hz-swatch {
+      width: 22px; height: 12px;
+      border-radius: 2px;
+    }
+
+    /* ── TOU Cost Bar Chart ── */
+    .tou-bars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    @media (max-width: 600px) {
+      .tou-bars-grid { grid-template-columns: 1fr; }
+    }
+    .tou-bar-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .tou-bar-label {
+      font-size: 0.88rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .tou-bar-track {
+      height: 12px;
+      background: #f8fafc;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .tou-bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.6s ease;
+    }
+    .tou-bar-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    .tou-bar-stats .highlight {
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    /* ── Hourly Table ── */
+    .table-scroll {
+      overflow-x: auto;
+      max-height: 480px;
+      overflow-y: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      min-width: 780px;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #1a3566;
+      z-index: 5;
+      padding: 0.65rem 0.85rem;
+      text-align: right;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      border-bottom: 1px solid var(--glass-border);
+      white-space: nowrap;
+    }
+    thead th:first-child { text-align: left; }
+    tbody tr {
+      border-bottom: 1px solid #e2e8f0;
+      transition: background 0.1s;
+    }
+    tbody tr:hover { background: #f8fafc; }
+    tbody td {
+      padding: 0.6rem 0.85rem;
+      text-align: right;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.88rem;
+      color: #64748b;
+      white-space: nowrap;
+    }
+    tbody td:first-child {
+      text-align: left;
+      font-family: system-ui;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    tr.row-peak   { background: rgba(239,68,68,0.06); }
+    tr.row-semi   { background: rgba(245,158,11,0.06); }
+    tr.row-off    { background: rgba(16,185,129,0.04); }
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .badge-peak    { background: rgba(239,68,68,0.18);  color: #f87171; }
+    .badge-semi    { background: rgba(245,158,11,0.18); color: #fbbf24; }
+    .badge-offpeak { background: rgba(16,185,129,0.18); color: #10b981; }
+
+    /* Table footer summary */
+    tfoot td {
+      padding: 0.65rem 0.85rem;
+      text-align: right;
+      font-size: 0.88rem;
+      font-family: 'Courier New', Courier, monospace;
+      color: var(--accent);
+      font-weight: 700;
+      border-top: 1px solid #e2e8f0;
+    }
+    tfoot td:first-child {
+      text-align: left;
+      font-family: system-ui;
+      font-size: 0.86rem;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── TOU Rate Adjuster ── */
+    .tou-rate-adjusters {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      padding-bottom: 1.25rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .tou-rate-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tou-rate-period {
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .tou-rate-stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tou-adj-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #1e293b;
+      font-size: 1.1rem;
+      font-weight: 400;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      flex-shrink: 0;
+      line-height: 1;
+      user-select: none;
+    }
+    .tou-adj-btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.28); }
+    .tou-adj-btn:active { transform: scale(0.90); background: rgba(255,255,255,0.20); }
+    .tou-adj-val {
+      font-size: 0.95rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: 700;
+      color: #1e293b;
+      min-width: 80px;
+      text-align: center;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      padding: 4px 8px;
+    }
+    .tou-rate-sub {
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+
+    /* ── Controls date label ── */
+    .date-field-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .date-field-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    /* scroll bar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* ── Page transitions ── */
+    @keyframes pgSlideFromRight { from { transform: translateX(18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgSlideFromLeft  { from { transform: translateX(-18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgFadeIn         { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pgSlideToLeft    { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-18px); opacity: 0; } }
+    @keyframes pgSlideToRight   { from { transform: translateX(0); opacity: 1; } to { transform: translateX(18px); opacity: 0; } }
+
+    html[data-page-enter='right'] body { animation: pgSlideFromRight 160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='left']  body { animation: pgSlideFromLeft  160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='fade']  body { animation: pgFadeIn         150ms ease both; }
+    html[data-page-exit='left']   body { animation: pgSlideToLeft    60ms ease-in both; pointer-events: none; }
+    html[data-page-exit='right']  body { animation: pgSlideToRight   60ms ease-in both; pointer-events: none; }
+  </style>
+</head>
+<body x-data="scheduleApp()" x-init="init()">
+
+  <!-- ── Top Bar ── -->
+  <header class="top-bar">
+    <div class="logo" style="display:flex;align-items:center;gap:8px;">
+      <div class="status-dot"></div>
+      <span style="font-size:13px;font-weight:700;letter-spacing:0.05em;color:rgba(255,255,255,0.92);white-space:nowrap;">AI 抽水機運轉研究系統</span>
+      <span style="font-size:11px;color:rgba(255,255,255,0.35);white-space:nowrap;">曾文淨水場 — 成大×台水</span>
+    </div>
+    <div class="flex items-center gap-2" style="margin-left:auto;">
+      <span style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:#10b981;font-size:11px;padding:3px 10px;border-radius:100px;white-space:nowrap;">● MPC 就緒</span>
+      <a href="index.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">主控台</a>
+      <a href="schedule.html" style="font-size:12px;color:#10b981;padding:4px 10px;border-radius:7px;border:1px solid rgba(16,185,129,0.28);background:rgba(16,185,129,0.10);text-decoration:none;white-space:nowrap;">排程</a>
+      <a href="cost.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">電費</a>
+      <a href="pump.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">泵浦</a>
+      <a href="history.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">歷史</a>
+      <a href="physics.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">物理</a>
+      <a href="pareto.html" style="font-size:12px;color:rgba(255,255,255,0.40);padding:4px 10px;border-radius:7px;transition:all 0.15s;border:1px solid transparent;text-decoration:none;white-space:nowrap;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.12)';this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.color='rgba(255,255,255,0.40)';this.style.borderColor='transparent';this.style.background='transparent'">Pareto</a>
+    </div>
+  </header>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+
+    <!-- Page Header -->
+    <div>
+      <h1 style="font-size:1.25rem; font-weight:700; color:#f4f4f5; margin:0 0 4px 0;">
+        24h 調度排程詳情
+      </h1>
+      <p style="font-size:0.78rem; color:#71717a; margin:0;">
+        抽水機組運行排程 × 時間電價優化 × 全日用電分析
+      </p>
+    </div>
+
+    <!-- ── Section 1: Controls Bar ── -->
+    <div class="glass-card" style="padding: 1rem 1.25rem;">
+      <div class="controls-bar" style="align-items:flex-end;">
+        <div class="date-field-wrap">
+          <span class="date-field-label">調度日期</span>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <svg style="width:16px;height:16px;color:#71717a;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <input type="date" x-model="selectedDate" :max="todayStr" />
+          </div>
+        </div>
+        <button class="btn btn-accent" @click="loadSchedule()" :disabled="loading">
+          <svg style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+          </svg>
+          載入排程
+        </button>
+        <button class="btn btn-outline" @click="downloadJSON()">
+          <svg style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          下載 JSON
+        </button>
+        <button class="btn btn-outline" @click="downloadCSV()">
+          <svg style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          下載 CSV
+        </button>
+        <div class="loading-indicator" x-show="loading">
+          <div class="spinner"></div>
+          <span>載入中...</span>
+        </div>
+        <div x-show="!loading && dataLoaded" style="display:flex;align-items:center;gap:0.4rem;font-size:0.75rem;color:#10b981;">
+          <svg style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span x-text="'已載入 ' + selectedDate + ' 排程'"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Section 2: Key Metrics ── -->
+    <div>
+      <div class="section-title">關鍵指標</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">日電費</div>
+          <div class="metric-value" x-text="metrics.dailyCost.toLocaleString()"></div>
+          <div class="metric-unit">NTD / 日</div>
+          <div class="metric-delta negative" x-text="metrics.costDelta"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">日耗電</div>
+          <div class="metric-value" x-text="metrics.dailyKWh.toLocaleString()"></div>
+          <div class="metric-unit">kWh / 日</div>
+          <div class="metric-delta" x-text="metrics.kwhDelta"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">供水達成率</div>
+          <div class="metric-value" x-text="metrics.supplyRate + '%'"></div>
+          <div class="metric-unit">目標達成</div>
+          <div class="metric-delta positive" x-text="metrics.supplyDelta"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">SEC</div>
+          <div class="metric-value" x-text="metrics.sec"></div>
+          <div class="metric-unit">kWh / 1000CMD</div>
+          <div class="metric-delta" x-text="metrics.secDelta"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">CO₂ 排放</div>
+          <div class="metric-value" x-text="metrics.co2"></div>
+          <div class="metric-unit">kg CO₂</div>
+          <div class="metric-delta" x-text="metrics.co2Delta"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Section 3: Gantt Chart ── -->
+    <div class="glass-card" style="padding:1.25rem;">
+      <div class="section-title">抽水機組運行甘特圖（P1–P5 × 24h）</div>
+      <div class="gantt-wrapper">
+        <div class="gantt-container">
+          <!-- Hour header -->
+          <div class="gantt-header">
+            <div></div>
+            <template x-for="h in hours" :key="h">
+              <div class="gantt-hour-label"
+                   :class="{
+                     'tou-peak-bg': isTOUPeak(h),
+                     'tou-semi-bg': isTOUSemi(h),
+                     'tou-off-bg':  !isTOUPeak(h) && !isTOUSemi(h)
+                   }"
+                   x-text="String(h).padStart(2,'0')"></div>
+            </template>
+          </div>
+          <!-- Pump rows -->
+          <template x-for="(pump, pi) in pumpNames" :key="pump">
+            <div class="gantt-row">
+              <div class="gantt-pump-label" x-text="pump"></div>
+              <template x-for="h in hours" :key="h">
+                <div class="gantt-cell"
+                     :style="{ background: hzColor(schedule[h][pi]) }"
+                     :class="{
+                       'tou-peak':    isTOUPeak(h),
+                       'tou-semi':    isTOUSemi(h),
+                       'tou-offpeak': !isTOUPeak(h) && !isTOUSemi(h)
+                     }"
+                     :data-tooltip="pump + ' ' + String(h).padStart(2,'0') + ':00  →  ' + (schedule[h][pi] === 0 ? 'OFF' : schedule[h][pi] + ' Hz')"
+                     x-text="schedule[h][pi] === 0 ? '' : schedule[h][pi]">
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+      <!-- Legend -->
+      <div class="tou-legend" style="margin-top:1rem;">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:rgba(239,68,68,0.35);border:1px solid rgba(239,68,68,0.6);"></div>
+          尖峰時段 (09-12, 13-17, 17-23)
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:rgba(245,158,11,0.35);border:1px solid rgba(245,158,11,0.6);"></div>
+          半尖峰 (07-09, 12-13)
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:rgba(16,185,129,0.25);border:1px solid rgba(16,185,129,0.4);"></div>
+          離峰 (00-07, 23-24)
+        </div>
+      </div>
+      <div class="hz-legend">
+        <div class="hz-legend-item">
+          <div class="hz-swatch" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);"></div> OFF
+        </div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.20);"></div> 40Hz</div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.35);"></div> 44Hz</div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.50);"></div> 48Hz</div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.65);"></div> 50Hz</div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.75);"></div> 52Hz</div>
+        <div class="hz-legend-item"><div class="hz-swatch" style="background:rgba(16,185,129,0.90);"></div> 54Hz</div>
+      </div>
+    </div>
+
+    <!-- ── Section 4: TOU Cost Breakdown ── -->
+    <div class="glass-card" style="padding:1.25rem;">
+      <div class="section-title">時間電價分段用電分析</div>
+
+      <!-- TOU Rate Adjusters -->
+      <div class="tou-rate-adjusters">
+        <!-- Off-peak -->
+        <div class="tou-rate-group">
+          <span class="tou-rate-period" style="color:#10b981;">離峰費率</span>
+          <div class="tou-rate-stepper">
+            <button class="tou-adj-btn" @click="adjustRate('offpeak', -0.05)" title="降低費率">−</button>
+            <span class="tou-adj-val" x-text="'NT$ ' + touRates.offpeak.toFixed(2)"></span>
+            <button class="tou-adj-btn" @click="adjustRate('offpeak', 0.05)" title="提高費率">+</button>
+          </div>
+          <span class="tou-rate-sub">00–07h, 23–24h　每度電</span>
+        </div>
+        <!-- Semi-peak -->
+        <div class="tou-rate-group">
+          <span class="tou-rate-period" style="color:#fbbf24;">半尖峰費率</span>
+          <div class="tou-rate-stepper">
+            <button class="tou-adj-btn" @click="adjustRate('semi', -0.05)" title="降低費率">−</button>
+            <span class="tou-adj-val" x-text="'NT$ ' + touRates.semi.toFixed(2)"></span>
+            <button class="tou-adj-btn" @click="adjustRate('semi', 0.05)" title="提高費率">+</button>
+          </div>
+          <span class="tou-rate-sub">07–09h, 12–13h　每度電</span>
+        </div>
+        <!-- Peak -->
+        <div class="tou-rate-group">
+          <span class="tou-rate-period" style="color:#f87171;">尖峰費率</span>
+          <div class="tou-rate-stepper">
+            <button class="tou-adj-btn" @click="adjustRate('peak', -0.05)" title="降低費率">−</button>
+            <span class="tou-adj-val" x-text="'NT$ ' + touRates.peak.toFixed(2)"></span>
+            <button class="tou-adj-btn" @click="adjustRate('peak', 0.05)" title="提高費率">+</button>
+          </div>
+          <span class="tou-rate-sub">09–12h, 13–23h　每度電</span>
+        </div>
+      </div>
+
+      <div class="tou-bars-grid">
+        <!-- Off-peak -->
+        <div class="tou-bar-group">
+          <div class="tou-bar-label" style="color:#10b981;">離峰 <span style="font-weight:400;font-size:0.65rem;color:#52525b;">00–07h, 23–24h</span></div>
+          <div style="font-size:0.8rem;color:#52525b;margin-bottom:4px;" x-text="'電費率 NT$' + touRates.offpeak.toFixed(2) + '/kWh'"></div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:#71717a;margin-bottom:3px;">
+              <span>耗電量</span>
+              <span x-text="touBreakdown.offpeak.kwh + ' kWh'"></span>
+            </div>
+            <div class="tou-bar-track">
+              <div class="tou-bar-fill" style="background:#10b981;"
+                   :style="{ width: (touBreakdown.offpeak.kwh / maxTouKWh * 100) + '%' }"></div>
+            </div>
+          </div>
+          <div class="tou-bar-stats">
+            <span>電費金額</span>
+            <span class="highlight" x-text="'NT$ ' + touBreakdown.offpeak.cost.toLocaleString()"></span>
+          </div>
+          <div class="tou-bar-stats">
+            <span>佔比</span>
+            <span x-text="touBreakdown.offpeak.pct + '%'"></span>
+          </div>
+        </div>
+        <!-- Semi-peak -->
+        <div class="tou-bar-group">
+          <div class="tou-bar-label" style="color:#fbbf24;">半尖峰 <span style="font-weight:400;font-size:0.65rem;color:#52525b;">07–09h, 12–13h</span></div>
+          <div style="font-size:0.8rem;color:#52525b;margin-bottom:4px;" x-text="'電費率 NT$' + touRates.semi.toFixed(2) + '/kWh'"></div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:#71717a;margin-bottom:3px;">
+              <span>耗電量</span>
+              <span x-text="touBreakdown.semi.kwh + ' kWh'"></span>
+            </div>
+            <div class="tou-bar-track">
+              <div class="tou-bar-fill" style="background:#f59e0b;"
+                   :style="{ width: (touBreakdown.semi.kwh / maxTouKWh * 100) + '%' }"></div>
+            </div>
+          </div>
+          <div class="tou-bar-stats">
+            <span>電費金額</span>
+            <span class="highlight" x-text="'NT$ ' + touBreakdown.semi.cost.toLocaleString()"></span>
+          </div>
+          <div class="tou-bar-stats">
+            <span>佔比</span>
+            <span x-text="touBreakdown.semi.pct + '%'"></span>
+          </div>
+        </div>
+        <!-- Peak -->
+        <div class="tou-bar-group">
+          <div class="tou-bar-label" style="color:#f87171;">尖峰 <span style="font-weight:400;font-size:0.65rem;color:#52525b;">09–12h, 13–23h</span></div>
+          <div style="font-size:0.8rem;color:#52525b;margin-bottom:4px;" x-text="'電費率 NT$' + touRates.peak.toFixed(2) + '/kWh'"></div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:#71717a;margin-bottom:3px;">
+              <span>耗電量</span>
+              <span x-text="touBreakdown.peak.kwh + ' kWh'"></span>
+            </div>
+            <div class="tou-bar-track">
+              <div class="tou-bar-fill" style="background:#ef4444;"
+                   :style="{ width: (touBreakdown.peak.kwh / maxTouKWh * 100) + '%' }"></div>
+            </div>
+          </div>
+          <div class="tou-bar-stats">
+            <span>電費金額</span>
+            <span class="highlight" x-text="'NT$ ' + touBreakdown.peak.cost.toLocaleString()"></span>
+          </div>
+          <div class="tou-bar-stats">
+            <span>佔比</span>
+            <span x-text="touBreakdown.peak.pct + '%'"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Visual comparative bar -->
+      <div style="margin-top:1.25rem;">
+        <div style="font-size:0.65rem;color:#52525b;margin-bottom:6px;">電費金額比較（NT$）</div>
+        <div style="display:flex;height:28px;border-radius:6px;overflow:hidden;gap:2px;">
+          <div :style="{ width: touBreakdown.offpeak.pct + '%', background:'rgba(16,185,129,0.6)' }"
+               style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;font-family:monospace;"
+               x-text="touBreakdown.offpeak.pct + '%'"></div>
+          <div :style="{ width: touBreakdown.semi.pct + '%', background:'rgba(245,158,11,0.65)' }"
+               style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;font-family:monospace;"
+               x-text="touBreakdown.semi.pct + '%'"></div>
+          <div :style="{ width: touBreakdown.peak.pct + '%', background:'rgba(239,68,68,0.65)' }"
+               style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;font-family:monospace;"
+               x-text="touBreakdown.peak.pct + '%'"></div>
+        </div>
+        <div style="display:flex;gap:1rem;margin-top:6px;">
+          <span style="font-size:0.62rem;color:#10b981;">■ 離峰</span>
+          <span style="font-size:0.62rem;color:#fbbf24;">■ 半尖峰</span>
+          <span style="font-size:0.62rem;color:#f87171;">■ 尖峰</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Section 5: Hourly Detail Table ── -->
+    <div class="glass-card" style="padding:1.25rem;">
+      <div class="section-title">逐時排程明細</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>時段</th>
+              <th>P1 Hz</th>
+              <th>P2 Hz</th>
+              <th>P3 Hz</th>
+              <th>P4 Hz</th>
+              <th>P5 Hz</th>
+              <th>總流量 (CMD/h)</th>
+              <th>功率 (kW)</th>
+              <th>費率</th>
+              <th>電費 (NTD)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="row in hourlyTable" :key="row.hour">
+              <tr :class="{
+                'row-peak': isTOUPeak(row.hour),
+                'row-semi': isTOUSemi(row.hour),
+                'row-off':  !isTOUPeak(row.hour) && !isTOUSemi(row.hour)
+              }">
+                <td>
+                  <span x-text="String(row.hour).padStart(2,'0') + ':00–' + String(row.hour+1).padStart(2,'0') + ':00'"></span>
+                </td>
+                <td x-text="row.hz[0] === 0 ? '–' : row.hz[0]"></td>
+                <td x-text="row.hz[1] === 0 ? '–' : row.hz[1]"></td>
+                <td x-text="row.hz[2] === 0 ? '–' : row.hz[2]"></td>
+                <td x-text="row.hz[3] === 0 ? '–' : row.hz[3]"></td>
+                <td x-text="row.hz[4] === 0 ? '–' : row.hz[4]"></td>
+                <td x-text="row.flow.toFixed(1)"></td>
+                <td x-text="row.power.toFixed(1)"></td>
+                <td>
+                  <span class="badge"
+                        :class="{
+                          'badge-peak':    isTOUPeak(row.hour),
+                          'badge-semi':    isTOUSemi(row.hour),
+                          'badge-offpeak': !isTOUPeak(row.hour) && !isTOUSemi(row.hour)
+                        }"
+                        x-text="isTOUPeak(row.hour) ? '尖峰' : (isTOUSemi(row.hour) ? '半尖峰' : '離峰')">
+                  </span>
+                </td>
+                <td x-text="row.cost.toFixed(1)"></td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>合計</td>
+              <td colspan="5"></td>
+              <td x-text="totalFlow.toFixed(1)"></td>
+              <td x-text="totalPower.toFixed(1)"></td>
+              <td></td>
+              <td x-text="totalCost.toFixed(1)"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Bottom Bar ── -->
+  <nav class="bottom-nav" style="justify-content:center;gap:6px;height:52px;">
+    <a href="index.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">主控台</a>
+    <a href="schedule.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(16,185,129,0.32);color:#10b981;background:rgba(16,185,129,0.10);text-decoration:none;white-space:nowrap;">24h 排程</a>
+    <a href="cost.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">電費分析</a>
+    <a href="pump.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">抽水機狀態</a>
+    <a href="history.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">歷史紀錄</a>
+    <a href="physics.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">PINNs 物理</a>
+    <a href="pareto.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.10);color:rgba(255,255,255,0.45);text-decoration:none;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.color='white';this.style.borderColor='rgba(255,255,255,0.22)';this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.color='rgba(255,255,255,0.45)';this.style.borderColor='rgba(255,255,255,0.10)';this.style.background='transparent'">Pareto 分析</a>
+    <span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.22);font-family:monospace;">Combo 04 · PINNs-MPC · v3.2</span>
+  </nav>
+
+  <script>
+  function scheduleApp() {
+    return {
+      // ── State ──
+      selectedDate: '',
+      todayStr: '',
+      loading: false,
+      dataLoaded: false,
+      lastUpdated: '',
+
+      // ── Data ──
+      hours: Array.from({length: 24}, (_, i) => i),
+      pumpNames: ['P1 主泵', 'P2 主泵', 'P3 輔泵', 'P4 輔泵', 'P5 備用'],
+
+      // schedule[hour][pumpIndex] = Hz (0 = OFF)
+      schedule: [],
+      hourlyTable: [],
+      metrics: {
+        dailyCost: 0, costDelta: '',
+        dailyKWh: 0,  kwhDelta: '',
+        supplyRate: 0, supplyDelta: '',
+        sec: 0,       secDelta: '',
+        co2: 0,       co2Delta: ''
+      },
+      touBreakdown: {
+        offpeak: { kwh: 0, cost: 0, pct: 0 },
+        semi:    { kwh: 0, cost: 0, pct: 0 },
+        peak:    { kwh: 0, cost: 0, pct: 0 }
+      },
+      maxTouKWh: 1,
+      totalFlow: 0,
+      totalPower: 0,
+      totalCost: 0,
+
+      // ── TOU Rate (Taiwan TPC, Summer) — reactive for UI adjustment ──
+      TOU_RATE: { offpeak: 1.63, semi: 2.81, peak: 4.65 },
+      touRates: { offpeak: 1.63, semi: 2.81, peak: 4.65 },
+
+      init() {
+        const today = new Date();
+        this.todayStr = today.toISOString().slice(0, 10);
+        this.selectedDate = this.todayStr;
+        this.lastUpdated = today.toLocaleTimeString('zh-TW');
+        this.loadSchedule();
+      },
+
+      // ── TOU classification ──
+      isTOUPeak(h) {
+        return (h >= 9 && h < 12) || (h >= 13 && h < 23);
+      },
+      isTOUSemi(h) {
+        return (h >= 7 && h < 9) || (h >= 12 && h < 13);
+      },
+      getTOURate(h) {
+        if (this.isTOUPeak(h)) return this.touRates.peak;
+        if (this.isTOUSemi(h)) return this.touRates.semi;
+        return this.touRates.offpeak;
+      },
+
+      adjustRate(period, delta) {
+        const updated = parseFloat((this.touRates[period] + delta).toFixed(2));
+        if (updated < 0.10) return; // 下限 0.10
+        this.touRates[period] = updated;
+        if (this.dataLoaded) this.buildDerivedData(this.schedule);
+      },
+
+      // ── Hz → kW model (linear approximation per pump) ──
+      hzToKW(hz) {
+        if (hz === 0) return 0;
+        // Affinity law: P ∝ f³, base at 50Hz = 75kW
+        return parseFloat((75 * Math.pow(hz / 50, 3)).toFixed(2));
+      },
+
+      // ── Hz → Flow model (affinity: Q ∝ f) ──
+      hzToFlow(hz) {
+        if (hz === 0) return 0;
+        // Base at 50Hz = 480 CMD/h per pump
+        return parseFloat((480 * (hz / 50)).toFixed(1));
+      },
+
+      // ── Hz → Cell Background Color ──
+      hzColor(hz) {
+        const map = {
+          0:  'rgba(255,255,255,0.05)',
+          40: 'rgba(16,185,129,0.20)',
+          44: 'rgba(16,185,129,0.35)',
+          48: 'rgba(16,185,129,0.50)',
+          50: 'rgba(16,185,129,0.65)',
+          52: 'rgba(16,185,129,0.75)',
+          54: 'rgba(16,185,129,0.90)',
+        };
+        return map[hz] || 'rgba(16,185,129,0.40)';
+      },
+
+      // ── Mock Data Generator ──
+      generateMockSchedule(dateStr) {
+        // Realistic TOU-optimised schedule for 5 pumps over 24h
+        // Strategy: max pumping at off-peak; reduce/shutdown during peak
+        const raw = [
+          // hour: [P1, P2, P3, P4, P5]
+          /* 00 */ [50, 50, 48, 48, 44],
+          /* 01 */ [50, 50, 48, 48, 44],
+          /* 02 */ [54, 54, 52, 50, 48],
+          /* 03 */ [54, 54, 52, 52, 48],
+          /* 04 */ [54, 54, 52, 52, 50],
+          /* 05 */ [54, 54, 52, 52, 50],
+          /* 06 */ [52, 52, 50, 50, 48],
+          /* 07 */ [48, 48, 44, 44,  0], // semi-peak starts
+          /* 08 */ [48, 44, 44, 40,  0],
+          /* 09 */ [44, 44, 40,  0,  0], // peak starts
+          /* 10 */ [44, 40,  0,  0,  0],
+          /* 11 */ [40, 40,  0,  0,  0],
+          /* 12 */ [44, 44, 40,  0,  0], // semi-peak (12–13)
+          /* 13 */ [40, 40,  0,  0,  0], // peak resumes
+          /* 14 */ [40, 40,  0,  0,  0],
+          /* 15 */ [44, 44, 40,  0,  0],
+          /* 16 */ [44, 44, 40,  0,  0],
+          /* 17 */ [40, 40,  0,  0,  0],
+          /* 18 */ [40, 40,  0,  0,  0],
+          /* 19 */ [44, 40,  0,  0,  0],
+          /* 20 */ [44, 44, 40,  0,  0],
+          /* 21 */ [44, 44, 44, 40,  0],
+          /* 22 */ [48, 48, 44, 44,  0],
+          /* 23 */ [50, 50, 48, 48, 44], // off-peak again
+        ];
+        return raw;
+      },
+
+      // ── Build Derived Data ──
+      buildDerivedData(rawSchedule) {
+        this.schedule = rawSchedule;
+        const table = [];
+        let tOffKWh = 0, tSemiKWh = 0, tPeakKWh = 0;
+        let tOffCost = 0, tSemiCost = 0, tPeakCost = 0;
+        let tFlow = 0, tPower = 0, tCost = 0;
+
+        for (let h = 0; h < 24; h++) {
+          const hz = rawSchedule[h];
+          const totalPower = hz.reduce((s, f) => s + this.hzToKW(f), 0);
+          const totalFlow  = hz.reduce((s, f) => s + this.hzToFlow(f), 0);
+          const rate = this.getTOURate(h);
+          const cost = totalPower * rate;
+
+          table.push({
+            hour: h,
+            hz: hz,
+            power: totalPower,
+            flow: totalFlow,
+            rate: rate,
+            cost: cost
+          });
+
+          if (this.isTOUPeak(h)) {
+            tPeakKWh  += totalPower;
+            tPeakCost += cost;
+          } else if (this.isTOUSemi(h)) {
+            tSemiKWh  += totalPower;
+            tSemiCost += cost;
+          } else {
+            tOffKWh  += totalPower;
+            tOffCost += cost;
+          }
+          tFlow  += totalFlow;
+          tPower += totalPower;
+          tCost  += cost;
+        }
+
+        this.hourlyTable = table;
+        this.totalFlow  = tFlow;
+        this.totalPower = tPower;
+        this.totalCost  = tCost;
+
+        const totalKWh = tOffKWh + tSemiKWh + tPeakKWh;
+        const totalCostAll = tOffCost + tSemiCost + tPeakCost;
+
+        this.touBreakdown = {
+          offpeak: {
+            kwh:  parseFloat(tOffKWh.toFixed(1)),
+            cost: parseFloat(tOffCost.toFixed(0)),
+            pct:  totalCostAll > 0 ? parseFloat((tOffCost / totalCostAll * 100).toFixed(1)) : 0
+          },
+          semi: {
+            kwh:  parseFloat(tSemiKWh.toFixed(1)),
+            cost: parseFloat(tSemiCost.toFixed(0)),
+            pct:  totalCostAll > 0 ? parseFloat((tSemiCost / totalCostAll * 100).toFixed(1)) : 0
+          },
+          peak: {
+            kwh:  parseFloat(tPeakKWh.toFixed(1)),
+            cost: parseFloat(tPeakCost.toFixed(0)),
+            pct:  totalCostAll > 0 ? parseFloat((tPeakCost / totalCostAll * 100).toFixed(1)) : 0
+          }
+        };
+        this.maxTouKWh = Math.max(tOffKWh, tSemiKWh, tPeakKWh, 1);
+
+        // Metrics
+        const dailyCost = Math.round(totalCostAll);
+        const dailyKWh  = parseFloat(totalKWh.toFixed(1));
+        const totalFlowDay = tFlow; // CMD
+        const targetFlow   = 55000; // CMD/day target
+        const supplyRate   = parseFloat(Math.min((totalFlowDay / targetFlow) * 100, 100).toFixed(1));
+        const sec          = totalFlowDay > 0
+                              ? parseFloat((totalKWh / (totalFlowDay / 1000)).toFixed(2))
+                              : 0;
+        const co2          = parseFloat((totalKWh * 0.509).toFixed(1)); // kg, TW grid factor
+
+        this.metrics = {
+          dailyCost,
+          costDelta:   '↓ 12.3% vs 昨日',
+          dailyKWh,
+          kwhDelta:    '↓ 8.7% vs 昨日',
+          supplyRate,
+          supplyDelta: '↑ 0.5% vs 目標',
+          sec:         sec.toFixed(2),
+          secDelta:    '優於基準 18%',
+          co2:         co2.toFixed(1),
+          co2Delta:    '↓ 8.7% vs 昨日'
+        };
+      },
+
+      // ── Load Schedule ──
+      async loadSchedule() {
+        this.loading = true;
+        this.dataLoaded = false;
+        try {
+          const res = await fetch(`/api/schedule?date=${this.selectedDate}`);
+          if (!res.ok) throw new Error('API error');
+          const data = await res.json();
+          // Expect data.schedule = 24-element array of [p1,p2,p3,p4,p5]
+          this.buildDerivedData(data.schedule);
+        } catch (e) {
+          // Fallback to mock data
+          const mock = this.generateMockSchedule(this.selectedDate);
+          this.buildDerivedData(mock);
+        } finally {
+          this.loading = false;
+          this.dataLoaded = true;
+          this.lastUpdated = new Date().toLocaleTimeString('zh-TW');
+        }
+      },
+
+      // ── Download JSON ──
+      downloadJSON() {
+        const payload = {
+          date: this.selectedDate,
+          generated: new Date().toISOString(),
+          metrics: this.metrics,
+          touBreakdown: this.touBreakdown,
+          schedule: this.hourlyTable.map(r => ({
+            hour: r.hour,
+            hz: { P1: r.hz[0], P2: r.hz[1], P3: r.hz[2], P4: r.hz[3], P5: r.hz[4] },
+            flow_cmd_h:  parseFloat(r.flow.toFixed(1)),
+            power_kw:    parseFloat(r.power.toFixed(1)),
+            rate_ntd_kwh: r.rate,
+            cost_ntd:    parseFloat(r.cost.toFixed(1))
+          }))
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `tw-water-schedule-${this.selectedDate}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+
+      // ── Download CSV ──
+      downloadCSV() {
+        const rows = [
+          ['時段', 'P1 Hz', 'P2 Hz', 'P3 Hz', 'P4 Hz', 'P5 Hz', '總流量(CMD/h)', '功率(kW)', '費率(NTD/kWh)', '電費(NTD)']
+        ];
+        this.hourlyTable.forEach(r => {
+          const h = String(r.hour).padStart(2, '0');
+          const h1 = String(r.hour + 1).padStart(2, '0');
+          rows.push([
+            `${h}:00-${h1}:00`,
+            r.hz[0] || 'OFF',
+            r.hz[1] || 'OFF',
+            r.hz[2] || 'OFF',
+            r.hz[3] || 'OFF',
+            r.hz[4] || 'OFF',
+            r.flow.toFixed(1),
+            r.power.toFixed(1),
+            r.rate,
+            r.cost.toFixed(1)
+          ]);
+        });
+        // Summary row
+        rows.push(['合計', '', '', '', '', '',
+          this.totalFlow.toFixed(1),
+          this.totalPower.toFixed(1), '',
+          this.totalCost.toFixed(1)
+        ]);
+        const csv = rows.map(r => r.join(',')).join('\n');
+        const bom = '\uFEFF'; // UTF-8 BOM for Excel
+        const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `tw-water-schedule-${this.selectedDate}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    };
+  }
+  </script>
+  <script src="transitions.js"></script>
+</body>
+</html>

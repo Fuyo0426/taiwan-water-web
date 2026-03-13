@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抽水機狀態 — Taiwan Water AI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f0f4f8;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: #1e293b;
+    min-height: 100vh;
+  }
+
+  .bg-mesh {
+    display: none;
+  }
+  .bg-grid {
+    display: none;
+  }
+
+  .glass {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border-radius: 16px;
+  }
+
+  .layout {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-rows: 56px 1fr 64px;
+    min-height: 100vh;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex; align-items: center;
+    padding: 0 28px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    gap: 12px;
+    position: sticky; top: 0; z-index: 50;
+    background: #1a3566;
+  }
+  .logo-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 12px rgba(16,185,129,0.8);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
+  .logo-text { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: rgba(255,255,255,0.95); white-space: nowrap; }
+  .logo-sub  { font-size: 11px; color: rgba(255,255,255,0.55); margin-left: 4px; letter-spacing: 0.05em; white-space: nowrap; }
+  .topbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .status-pill {
+    background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.35);
+    color: #10b981; font-size: 11px; padding: 3px 10px; border-radius: 100px;
+    letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .nav-link {
+    font-size: 12px; color: rgba(255,255,255,0.65); padding: 4px 12px;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+    border: 1px solid transparent; text-decoration: none; white-space: nowrap;
+  }
+  .nav-link:hover { color: white; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); }
+  .nav-link.active { color: #10b981; border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.12); }
+
+  /* Main content */
+  .main-content {
+    padding: 32px;
+    display: flex; flex-direction: column; gap: 28px;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    color: #94a3b8; text-transform: uppercase; margin-bottom: 16px;
+  }
+
+  /* Pump status cards */
+  .pumps-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .pump-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 20px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    position: relative; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .pump-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 16px 16px 0 0;
+  }
+  .pump-card.running::before { background: linear-gradient(90deg, #10b981, rgba(16,185,129,0.3)); }
+  .pump-card.standby::before { background: linear-gradient(90deg, #f59e0b, rgba(245,158,11,0.3)); }
+  .pump-card.stopped::before { background: linear-gradient(90deg, #cbd5e1, transparent); }
+  .pump-card.running { border-color: rgba(16,185,129,0.3); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .pump-card.standby { border-color: rgba(245,158,11,0.3); }
+
+  .pump-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .pump-name { font-size: 16px; font-weight: 700; color: #1e293b; }
+  .pump-type { font-size: 10px; color: #94a3b8; margin-top: 2px; letter-spacing: 0.06em; }
+
+  .status-pill-sm {
+    font-size: 10px; padding: 3px 9px; border-radius: 100px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill-running { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+  .pill-standby { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.25); }
+  .pill-stopped { background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; }
+
+  .freq-display { text-align: center; padding: 12px 0 8px; }
+  .freq-value { font-size: 42px; font-weight: 700; font-family: 'SF Mono', 'Courier New', monospace; line-height: 1; }
+  .freq-unit { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+  .pump-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; }
+  .stat-mini-label { font-size: 9px; color: #94a3b8; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+  .stat-mini-value { font-size: 14px; font-weight: 700; font-family: monospace; }
+
+  /* Grade colors */
+  .grade-A { color: #10b981; }
+  .grade-B { color: #34d399; }
+  .grade-C { color: #f59e0b; }
+  .grade-D { color: #f87171; }
+
+  /* Efficiency colors */
+  .eff-high { color: #10b981; }
+  .eff-mid  { color: #f59e0b; }
+  .eff-low  { color: #f87171; }
+
+  /* Mini efficiency bar */
+  .eff-bar-track { height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .eff-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+
+  /* BEP Curve visualization */
+  .bep-curves-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .curve-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .curve-title { font-size: 11px; font-weight: 600; color: #475569; margin-bottom: 12px; }
+
+  /* CSS bell curve using clip-path and border-radius */
+  .curve-container {
+    position: relative; height: 80px; width: 100%;
+    margin-bottom: 10px;
+  }
+  .curve-bg {
+    position: absolute; inset: 0;
+    background: #f0f4f8;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  /* Simulated bell curve using box shadows and border-radius */
+  .curve-shape {
+    position: absolute;
+    bottom: 0; left: 10%; right: 10%;
+    height: 65%;
+    background: rgba(16,185,129,0.12);
+    border-radius: 50% 50% 0 0 / 80% 80% 0 0;
+    border: 1px solid rgba(16,185,129,0.25);
+    border-bottom: none;
+  }
+  .curve-shape::before {
+    content: '';
+    position: absolute;
+    bottom: 0; left: -15%; right: -15%;
+    height: 40%;
+    background: rgba(16,185,129,0.06);
+    border-radius: 50% 50% 0 0 / 60% 60% 0 0;
+  }
+  /* BEP dot */
+  .bep-dot {
+    position: absolute; width: 8px; height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 8px rgba(16,185,129,0.6);
+    transform: translate(-50%, -50%);
+    z-index: 2;
+  }
+  /* Current operating dot */
+  .op-dot {
+    position: absolute; width: 8px; height: 8px;
+    background: #1a3566;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 6px rgba(26,53,102,0.4);
+    transform: translate(-50%, -50%);
+    z-index: 2;
+  }
+  /* Vertical line at op point */
+  .op-line {
+    position: absolute; width: 1px;
+    background: rgba(26,53,102,0.2);
+    bottom: 0;
+    transform: translateX(-50%);
+  }
+  /* BEP vertical line */
+  .bep-line {
+    position: absolute; width: 1px;
+    background: rgba(16,185,129,0.4);
+    bottom: 0;
+    transform: translateX(-50%);
+  }
+
+  .curve-axis {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: #94a3b8; font-family: monospace;
+    margin-top: 4px;
+  }
+  .curve-legend { display: flex; gap: 10px; margin-top: 8px; }
+  .curve-legend-item { display: flex; align-items: center; gap: 4px; font-size: 9px; color: #64748b; }
+  .legend-circle { width: 6px; height: 6px; border-radius: 50%; }
+  .bep-deviation { font-size: 10px; margin-top: 6px; font-family: monospace; }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .data-table th {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #64748b; padding: 10px 16px; text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .data-table td {
+    font-size: 13px; padding: 13px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    font-family: 'SF Mono', 'Courier New', monospace;
+    color: #1e293b;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #f8fafc; }
+
+  /* Alert panel */
+  .alert-panel { display: flex; flex-direction: column; gap: 12px; }
+  .alert-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 16px 20px;
+    border-radius: 12px;
+  }
+  .alert-item.warn {
+    background: rgba(245,158,11,0.07);
+    border: 1px solid rgba(245,158,11,0.2);
+  }
+  .alert-item.danger {
+    background: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.2);
+  }
+  .alert-item.ok {
+    background: rgba(16,185,129,0.05);
+    border: 1px solid rgba(16,185,129,0.15);
+  }
+  .alert-icon {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+  }
+  .icon-warn { background: rgba(245,158,11,0.2); color: #f59e0b; border: 1px solid rgba(245,158,11,0.4); }
+  .icon-danger { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+  .icon-ok { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+  .alert-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .alert-warn-title { color: #f59e0b; }
+  .alert-danger-title { color: #f87171; }
+  .alert-ok-title { color: #10b981; }
+  .alert-desc { font-size: 12px; color: #64748b; line-height: 1.5; }
+  .alert-badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .badge-sm {
+    font-size: 10px; padding: 2px 8px; border-radius: 100px;
+    font-family: monospace;
+  }
+  .badge-danger { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+  .badge-warn   { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
+  .badge-ok     { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.2); }
+
+  /* Cavitation risk bar */
+  .risk-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .risk-fill { height: 100%; border-radius: 3px; }
+
+  /* Bottom bar */
+  .bottom-bar {
+    border-top: 1px solid rgba(255,255,255,0.15);
+    display: flex; align-items: center; padding: 0 28px; gap: 8px;
+    background: #1a3566;
+    position: sticky; bottom: 0; z-index: 50;
+  }
+  .page-pill {
+    padding: 6px 16px; border-radius: 100px; font-size: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.2s;
+    background: transparent; white-space: nowrap; text-decoration: none;
+  }
+  .page-pill:hover { color: white; border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); }
+  .page-pill.active { color: #10b981; border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.12); }
+  .bottom-right { margin-left: auto; font-size: 11px; color: rgba(255,255,255,0.4); font-family: monospace; }
+
+  .divider { height: 1px; background: #e2e8f0; }
+
+  /* ── Page transitions ── */
+  @keyframes pgSlideFromRight { from { transform: translateX(18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes pgSlideFromLeft  { from { transform: translateX(-18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes pgFadeIn         { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pgSlideToLeft    { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-18px); opacity: 0; } }
+  @keyframes pgSlideToRight   { from { transform: translateX(0); opacity: 1; } to { transform: translateX(18px); opacity: 0; } }
+  html[data-page-enter='right'] body { animation: pgSlideFromRight 160ms cubic-bezier(0.16,1,0.3,1) both; }
+  html[data-page-enter='left']  body { animation: pgSlideFromLeft  160ms cubic-bezier(0.16,1,0.3,1) both; }
+  html[data-page-enter='fade']  body { animation: pgFadeIn         150ms ease both; }
+  html[data-page-exit='left']   body { animation: pgSlideToLeft    60ms ease-in both; pointer-events: none; }
+  html[data-page-exit='right']  body { animation: pgSlideToRight   60ms ease-in both; pointer-events: none; }
+</style>
+</head>
+<body x-data="pumpData()" x-init="init()">
+<div class="bg-mesh"></div>
+<div class="bg-grid"></div>
+
+<div class="layout">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="logo-dot"></div>
+    <span class="logo-text">AI 抽水機運轉研究系統</span>
+    <span class="logo-sub">曾文淨水場 — 成大×台水產學合作</span>
+    <div class="topbar-right">
+      <span class="status-pill">● 5 泵浦監控中</span>
+      <a href="index.html" class="nav-link">主控台</a>
+      <a href="schedule.html" class="nav-link">排程</a>
+      <a href="cost.html" class="nav-link">電費</a>
+      <a href="pump.html" class="nav-link active">泵浦</a>
+      <a href="history.html" class="nav-link">歷史</a>
+      <a href="physics.html" class="nav-link">物理</a>
+      <a href="pareto.html" class="nav-link">Pareto</a>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="main-content">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:baseline;gap:16px;">
+      <h1 style="font-size:20px;font-weight:700;color:#1e293b;">抽水機狀態監控</h1>
+      <span style="font-size:12px;color:#94a3b8;font-family:monospace;" x-text="'更新時間 ' + lastUpdate"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:#64748b;">運轉中</span>
+        <span style="font-size:14px;font-weight:700;font-family:monospace;color:#10b981;" x-text="pumps.filter(p=>p.status==='running').length"></span>
+        <span style="font-size:11px;color:#cbd5e1;">/</span>
+        <span style="font-size:14px;font-weight:700;font-family:monospace;color:#475569;" x-text="pumps.length"></span>
+        <span style="font-size:11px;color:#64748b;">台</span>
+      </div>
+    </div>
+
+    <!-- Section 1: 5 pump status cards -->
+    <div>
+      <div class="section-label">Section 1 — 抽水機即時狀態</div>
+      <div class="pumps-grid">
+        <template x-for="pump in pumps" :key="pump.id">
+          <div class="pump-card" :class="pump.status">
+
+            <!-- Header: name + status pill -->
+            <div class="pump-header">
+              <div>
+                <div class="pump-name" x-text="pump.id"></div>
+                <div class="pump-type" x-text="pump.type"></div>
+              </div>
+              <div class="status-pill-sm"
+                   :class="pump.status === 'running' ? 'pill-running' : pump.status === 'standby' ? 'pill-standby' : 'pill-stopped'"
+                   x-text="pump.status === 'running' ? '運轉中' : pump.status === 'standby' ? '待機' : '停機'">
+              </div>
+            </div>
+
+            <!-- Frequency — large monospace -->
+            <div class="freq-display">
+              <div class="freq-value"
+                   :class="pump.status === 'running' ? (pump.efficiency >= 80 ? 'grade-A' : pump.efficiency >= 70 ? 'grade-C' : 'grade-D') : 'grade-D'"
+                   :style="pump.status !== 'running' ? 'color:#cbd5e1' : ''"
+                   x-text="pump.status !== 'stopped' ? pump.freq.toFixed(1) : '—'"></div>
+              <div class="freq-unit">Hz</div>
+            </div>
+
+            <!-- Stats grid: efficiency, BEP deviation, health, power -->
+            <div class="pump-stats">
+              <div class="stat-mini">
+                <div class="stat-mini-label">效率</div>
+                <div class="stat-mini-value"
+                     :class="pump.efficiency >= 80 ? 'eff-high' : pump.efficiency >= 70 ? 'eff-mid' : 'eff-low'"
+                     x-text="pump.status !== 'stopped' ? pump.efficiency + '%' : '—'"></div>
+              </div>
+              <div class="stat-mini">
+                <div class="stat-mini-label">BEP偏差</div>
+                <div class="stat-mini-value"
+                     :class="Math.abs(pump.freq - pump.bepFreq) <= 2 ? 'eff-high' : Math.abs(pump.freq - pump.bepFreq) <= 5 ? 'eff-mid' : 'eff-low'"
+                     x-text="pump.status !== 'stopped' ? (pump.freq - pump.bepFreq).toFixed(1) + ' Hz' : '—'"></div>
+              </div>
+              <div class="stat-mini">
+                <div class="stat-mini-label">健康評分</div>
+                <div class="stat-mini-value"
+                     :class="'grade-' + pump.grade"
+                     x-text="pump.grade + ' 級'"></div>
+              </div>
+              <div class="stat-mini">
+                <div class="stat-mini-label">當前功率</div>
+                <div class="stat-mini-value" style="color:#475569;"
+                     x-text="pump.status !== 'stopped' ? pump.currentKw + ' kW' : '0 kW'"></div>
+              </div>
+            </div>
+
+            <!-- Mini efficiency bar -->
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;margin-bottom:4px;font-family:monospace;">
+                <span>效率 0%</span>
+                <span x-text="pump.status !== 'stopped' ? pump.efficiency + '%' : '停機'"></span>
+                <span>100%</span>
+              </div>
+              <div class="eff-bar-track">
+                <div class="eff-bar-fill"
+                     :style="'width:' + (pump.status !== 'stopped' ? pump.efficiency : 0) + '%;background:' + (pump.efficiency >= 80 ? '#10b981' : pump.efficiency >= 70 ? '#f59e0b' : '#f87171')">
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Section 2: BEP efficiency curves -->
+    <div class="glass" style="padding:28px;">
+      <div class="section-label">Section 2 — BEP 效率曲線 (純 CSS 模擬)</div>
+      <div class="bep-curves-grid">
+        <template x-for="pump in pumps" :key="'curve-' + pump.id">
+          <div class="curve-card">
+            <div class="curve-title" x-text="pump.id + ' — ' + pump.type"></div>
+
+            <!-- Curve container -->
+            <div class="curve-container">
+              <div class="curve-bg"></div>
+              <!-- Bell curve shape -->
+              <div class="curve-shape" :style="'left:' + getCurveLeft(pump) + '%;right:' + getCurveRight(pump) + '%'"></div>
+
+              <!-- BEP vertical guide -->
+              <div class="bep-line" :style="'left:' + getFreqPct(pump.bepFreq) + '%;height:' + getBepHeight(pump) + '%'"></div>
+              <!-- Current op vertical guide -->
+              <div class="op-line" :style="'left:' + getFreqPct(pump.freq) + '%;height:' + getOpHeight(pump) + '%'"></div>
+
+              <!-- BEP dot -->
+              <div class="bep-dot"
+                   :style="'left:' + getFreqPct(pump.bepFreq) + '%;bottom:' + getBepHeight(pump) + '%'">
+              </div>
+              <!-- Current op dot -->
+              <div class="op-dot"
+                   :style="'left:' + getFreqPct(pump.freq) + '%;bottom:' + getOpHeight(pump) + '%'"
+                   x-show="pump.status !== 'stopped'">
+              </div>
+            </div>
+
+            <!-- X-axis labels -->
+            <div class="curve-axis">
+              <span>40Hz</span>
+              <span>48Hz</span>
+              <span>56Hz</span>
+            </div>
+
+            <!-- Legend -->
+            <div class="curve-legend">
+              <div class="curve-legend-item">
+                <div class="legend-circle" style="background:#10b981;box-shadow:0 0 4px rgba(16,185,129,0.7);"></div>
+                <span>BEP <span x-text="pump.bepFreq + 'Hz'"></span></span>
+              </div>
+              <div class="curve-legend-item" x-show="pump.status !== 'stopped'">
+                <div class="legend-circle" style="background:#1a3566;box-shadow:0 0 4px rgba(26,53,102,0.4);"></div>
+                <span>現況 <span x-text="pump.freq + 'Hz'"></span></span>
+              </div>
+            </div>
+
+            <!-- BEP deviation indicator -->
+            <div class="bep-deviation"
+                 :class="Math.abs(pump.freq - pump.bepFreq) <= 2 ? 'eff-high' : Math.abs(pump.freq - pump.bepFreq) <= 5 ? 'eff-mid' : 'eff-low'">
+              <span x-text="pump.status !== 'stopped' ? 'Δ ' + (pump.freq - pump.bepFreq).toFixed(1) + ' Hz from BEP' : '停機'"></span>
+            </div>
+
+          </div>
+        </template>
+      </div>
+
+      <div style="margin-top:16px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:11px;color:#64748b;line-height:1.7;">
+        曲線以 CSS 模擬。BEP = Best Efficiency Point（最佳效率點）。X 軸範圍 40–60 Hz。綠點 = BEP 位置，白點 = 當前運轉點。
+        偏差 &lt;2Hz = 最佳；2–5Hz = 可接受；&gt;5Hz = 建議調整頻率。
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Section 3: Operating parameters table -->
+    <div class="glass" style="padding:28px;">
+      <div class="section-label">Section 3 — 運轉參數明細</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>泵浦</th>
+            <th>型號 / 馬力</th>
+            <th>額定功率 (kW)</th>
+            <th>當前頻率 (Hz)</th>
+            <th>當前功率 (kW)</th>
+            <th>效率 (%)</th>
+            <th>BEP 頻率 (Hz)</th>
+            <th>BEP 偏差</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="pump in pumps" :key="'row-' + pump.id">
+            <tr>
+              <td style="color:#1e293b;font-weight:600;" x-text="pump.id"></td>
+              <td style="color:#64748b;" x-text="pump.type"></td>
+              <td style="color:#475569;" x-text="pump.ratedKw"></td>
+              <td>
+                <span :style="pump.status !== 'stopped' ? 'color:#1e293b' : 'color:#cbd5e1'"
+                      x-text="pump.status !== 'stopped' ? pump.freq.toFixed(1) : '—'"></span>
+              </td>
+              <td style="color:#475569;"
+                  x-text="pump.status !== 'stopped' ? pump.currentKw : '0'"></td>
+              <td>
+                <span :class="pump.efficiency >= 80 ? 'eff-high' : pump.efficiency >= 70 ? 'eff-mid' : 'eff-low'"
+                      x-text="pump.status !== 'stopped' ? pump.efficiency + '%' : '—'"></span>
+              </td>
+              <td style="color:#10b981;" x-text="pump.bepFreq"></td>
+              <td>
+                <span :class="Math.abs(pump.freq - pump.bepFreq) <= 2 ? 'eff-high' : Math.abs(pump.freq - pump.bepFreq) <= 5 ? 'eff-mid' : 'eff-low'"
+                      x-text="pump.status !== 'stopped' ? (pump.freq > pump.bepFreq ? '+' : '') + (pump.freq - pump.bepFreq).toFixed(1) + ' Hz' : '—'">
+                </span>
+              </td>
+              <td>
+                <span class="status-pill-sm"
+                      :class="pump.status === 'running' ? 'pill-running' : pump.status === 'standby' ? 'pill-standby' : 'pill-stopped'"
+                      x-text="pump.status === 'running' ? '運轉中' : pump.status === 'standby' ? '待機' : '停機'">
+                </span>
+              </td>
+            </tr>
+          </template>
+          <!-- Totals row -->
+          <tr style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+            <td style="color:#475569;font-weight:700;" colspan="4">合計 / 系統</td>
+            <td style="color:#1e293b;font-weight:700;" x-text="pumps.filter(p=>p.status!=='stopped').reduce((s,p)=>s+p.currentKw,0) + ' kW'"></td>
+            <td style="color:#10b981;font-weight:700;" x-text="(pumps.filter(p=>p.status!=='stopped').reduce((s,p)=>s+p.efficiency,0) / pumps.filter(p=>p.status!=='stopped').length).toFixed(1) + '%'"></td>
+            <td colspan="3" style="color:#94a3b8;">加權平均效率</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Section 4: Anomaly alerts -->
+    <div class="glass" style="padding:28px;">
+      <div class="section-label">Section 4 — 異常警報與系統診斷</div>
+      <div class="alert-panel">
+
+        <!-- 58.5Hz forbidden zone -->
+        <div class="alert-item" :class="forbiddenZoneAlert ? 'danger' : 'ok'">
+          <div class="alert-icon" :class="forbiddenZoneAlert ? 'icon-danger' : 'icon-ok'">
+            <span x-text="forbiddenZoneAlert ? '!' : '✓'"></span>
+          </div>
+          <div style="flex:1;">
+            <div class="alert-title" :class="forbiddenZoneAlert ? 'alert-danger-title' : 'alert-ok-title'">
+              58.5 Hz 共振禁區
+            </div>
+            <div class="alert-desc" x-show="!forbiddenZoneAlert">
+              所有運轉中泵浦均遠離 58.5 Hz 共振禁區（安全距離 &gt;2 Hz）。系統穩定運轉中。
+            </div>
+            <div class="alert-desc" x-show="forbiddenZoneAlert">
+              警告：偵測到泵浦頻率接近 58.5 Hz 共振點。立即調整頻率，避免機械共振損壞。
+            </div>
+            <div class="alert-badges">
+              <template x-for="pump in pumps.filter(p => p.status==='running')" :key="'fb-'+pump.id">
+                <span class="badge-sm"
+                      :class="Math.abs(pump.freq - 58.5) < 2 ? 'badge-danger' : 'badge-ok'"
+                      x-text="pump.id + ' @ ' + pump.freq.toFixed(1) + 'Hz'">
+                </span>
+              </template>
+            </div>
+          </div>
+          <div style="font-size:11px;font-family:monospace;color:#94a3b8;white-space:nowrap;margin-top:2px;">
+            禁區: 56.5–60.5 Hz
+          </div>
+        </div>
+
+        <!-- BEP deviation alert -->
+        <div class="alert-item" :class="bepAlert ? 'warn' : 'ok'">
+          <div class="alert-icon" :class="bepAlert ? 'icon-warn' : 'icon-ok'">
+            <span x-text="bepAlert ? '△' : '✓'"></span>
+          </div>
+          <div style="flex:1;">
+            <div class="alert-title" :class="bepAlert ? 'alert-warn-title' : 'alert-ok-title'">
+              BEP 偏差監控 (&gt;5 Hz 警戒)
+            </div>
+            <div class="alert-desc">
+              BEP 偏差超過 5 Hz 將造成效率顯著下降（每 Hz 約 -1.2% 效率損失），增加軸承負荷與震動。
+            </div>
+            <div class="alert-badges" style="margin-top:8px;">
+              <template x-for="pump in pumps.filter(p => p.status !== 'stopped')" :key="'bep-'+pump.id">
+                <span class="badge-sm"
+                      :class="Math.abs(pump.freq - pump.bepFreq) > 5 ? 'badge-warn' : Math.abs(pump.freq - pump.bepFreq) > 2 ? 'badge-warn' : 'badge-ok'"
+                      x-text="pump.id + ' Δ' + (pump.freq - pump.bepFreq).toFixed(1) + 'Hz'">
+                </span>
+              </template>
+            </div>
+          </div>
+          <div style="font-size:11px;font-family:monospace;color:#94a3b8;white-space:nowrap;margin-top:2px;">
+            警戒值: &gt;5 Hz
+          </div>
+        </div>
+
+        <!-- Cavitation risk -->
+        <div class="alert-item" :class="cavitationRisk > 30 ? 'danger' : cavitationRisk > 15 ? 'warn' : 'ok'">
+          <div class="alert-icon" :class="cavitationRisk > 30 ? 'icon-danger' : cavitationRisk > 15 ? 'icon-warn' : 'icon-ok'">
+            <span x-text="cavitationRisk > 30 ? '!' : cavitationRisk > 15 ? '△' : '✓'"></span>
+          </div>
+          <div style="flex:1;">
+            <div class="alert-title" :class="cavitationRisk > 30 ? 'alert-danger-title' : cavitationRisk > 15 ? 'alert-warn-title' : 'alert-ok-title'">
+              氣穴（Cavitation）風險指標
+            </div>
+            <div class="alert-desc">
+              氣穴發生於泵浦進口壓力低於液體蒸氣壓時，造成葉輪侵蝕與噪音。
+              當前系統風險指數：<span style="font-family:monospace;color:#1e293b;font-weight:600;" x-text="cavitationRisk + '%'"></span>
+            </div>
+            <div class="risk-bar" style="max-width:300px;margin-top:8px;">
+              <div class="risk-fill"
+                   :style="'width:' + cavitationRisk + '%;background:' + (cavitationRisk > 30 ? '#f87171' : cavitationRisk > 15 ? '#f59e0b' : '#10b981')">
+              </div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:6px;">
+              <span style="font-size:9px;color:#10b981;font-family:monospace;">0–15%: 安全</span>
+              <span style="font-size:9px;color:#f59e0b;font-family:monospace;">15–30%: 注意</span>
+              <span style="font-size:9px;color:#f87171;font-family:monospace;">&gt;30%: 危險</span>
+            </div>
+          </div>
+          <div style="font-size:11px;font-family:monospace;margin-top:2px;"
+               :style="cavitationRisk > 30 ? 'color:#f87171' : cavitationRisk > 15 ? 'color:#f59e0b' : 'color:#10b981'"
+               x-text="cavitationRisk > 30 ? '高風險' : cavitationRisk > 15 ? '中風險' : '低風險'">
+          </div>
+        </div>
+
+        <!-- System efficiency summary -->
+        <div class="alert-item ok">
+          <div class="alert-icon icon-ok">✓</div>
+          <div style="flex:1;">
+            <div class="alert-title alert-ok-title">系統整體效率</div>
+            <div class="alert-desc">
+              當前 <span x-text="pumps.filter(p=>p.status==='running').length"></span> 台泵浦運轉中，系統加權平均效率
+              <span style="font-family:monospace;color:#1e293b;font-weight:600;"
+                    x-text="(pumps.filter(p=>p.status!=='stopped').reduce((s,p)=>s+p.efficiency,0) / pumps.filter(p=>p.status!=='stopped').length).toFixed(1) + '%'">
+              </span>。
+              MPC 調度策略已最小化尖峰時段高功率運轉。
+            </div>
+            <div class="alert-badges" style="margin-top:8px;">
+              <span class="badge-sm badge-ok">尖峰負載 ↓ 已轉移</span>
+              <span class="badge-sm badge-ok">SEC 0.0328 kWh/m³</span>
+              <span class="badge-sm badge-ok">契約容量未超約</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Footer spacer -->
+    <div style="height:8px;"></div>
+
+  </div><!-- /main-content -->
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <a href="index.html" class="page-pill">主控台</a>
+    <a href="schedule.html" class="page-pill">24h 排程</a>
+    <a href="cost.html" class="page-pill">電費分析</a>
+    <a href="pump.html" class="page-pill active">抽水機狀態</a>
+    <a href="history.html" class="page-pill">歷史紀錄</a>
+    <a href="physics.html" class="page-pill">PINNs 物理合規</a>
+    <a href="pareto.html" class="page-pill">Pareto 分析</a>
+    <div class="bottom-right">Combo 04 · PINNs-MPC · v3.2</div>
+  </div>
+
+</div><!-- /layout -->
+
+<script>
+function pumpData() {
+  return {
+    lastUpdate: '2026-03-13 14:37:22',
+    forbiddenZoneAlert: false,
+    bepAlert: false,
+    cavitationRisk: 8,
+
+    pumps: [
+      {
+        id: 'P1',
+        type: '200 hp 離心泵',
+        ratedKw: 130,
+        currentKw: 112,
+        freq: 48.5,
+        bepFreq: 55,
+        efficiency: 82,
+        grade: 'B',
+        status: 'running',
+      },
+      {
+        id: 'P2',
+        type: '100 hp 離心泵',
+        ratedKw: 65,
+        currentKw: 58,
+        freq: 52.0,
+        bepFreq: 54,
+        efficiency: 87,
+        grade: 'A',
+        status: 'running',
+      },
+      {
+        id: 'P3',
+        type: '100 hp 離心泵',
+        ratedKw: 63,
+        currentKw: 54,
+        freq: 50.5,
+        bepFreq: 54,
+        efficiency: 83,
+        grade: 'B',
+        status: 'running',
+      },
+      {
+        id: 'P4',
+        type: '100 hp 離心泵',
+        ratedKw: 61,
+        currentKw: 48,
+        freq: 46.0,
+        bepFreq: 54,
+        efficiency: 74,
+        grade: 'C',
+        status: 'running',
+      },
+      {
+        id: 'P5',
+        type: '200 hp 離心泵',
+        ratedKw: 125,
+        currentKw: 0,
+        freq: 51.5,
+        bepFreq: 51.5,
+        efficiency: 88,
+        grade: 'A',
+        status: 'standby',
+      },
+    ],
+
+    async init() {
+      // Try to fetch from API
+      try {
+        const res = await fetch('/api/pumps', { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.pumps)) {
+            this.pumps = data.pumps;
+            if (data.lastUpdate) this.lastUpdate = data.lastUpdate;
+          }
+        }
+      } catch (e) {
+        // API not available — using mock data
+      }
+
+      this.computeAlerts();
+    },
+
+    computeAlerts() {
+      const running = this.pumps.filter(p => p.status === 'running');
+      this.forbiddenZoneAlert = running.some(p => Math.abs(p.freq - 58.5) < 2);
+      this.bepAlert = running.some(p => Math.abs(p.freq - p.bepFreq) > 5);
+
+      // Cavitation risk: based on P4 operating far from BEP at low freq
+      const p4 = this.pumps.find(p => p.id === 'P4');
+      if (p4 && p4.status === 'running') {
+        const deviation = Math.abs(p4.freq - p4.bepFreq);
+        this.cavitationRisk = Math.min(100, Math.round(deviation * 2.2 + 2));
+      } else {
+        this.cavitationRisk = 5;
+      }
+    },
+
+    // Helper: convert Hz (40–60 range) to % position on curve X axis
+    getFreqPct(hz) {
+      return Math.round(((hz - 40) / 20) * 90 + 5);
+    },
+
+    // BEP dot is at the curve peak height
+    getBepHeight(pump) {
+      return 72; // top of bell
+    },
+
+    // Operating point height — drops parabolically away from BEP
+    getOpHeight(pump) {
+      if (pump.status === 'stopped') return 0;
+      const deviation = Math.abs(pump.freq - pump.bepFreq);
+      const height = Math.max(10, 72 - deviation * deviation * 0.8);
+      return Math.round(height);
+    },
+
+    // Shift curve bell to center on BEP
+    getCurveLeft(pump) {
+      const bepPct = this.getFreqPct(pump.bepFreq);
+      return Math.max(5, bepPct - 40);
+    },
+    getCurveRight(pump) {
+      const bepPct = this.getFreqPct(pump.bepFreq);
+      return Math.max(5, 100 - bepPct - 40);
+    },
+  }
+}
+</script>
+<script src="transitions.js"></script>
+</body>
+</html>

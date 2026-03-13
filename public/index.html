@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>導入AI之抽水機運轉狀態監測及異常分析研究 — 曾文淨水場</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    /* ─── Reset ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background: #f0f4f8;
+      color: #1e293b;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+    }
+
+    /* ─── Subtle grid background ─── */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    }
+    .bg-grid::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(100,116,139,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(100,116,139,0.07) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    /* ─── Cards ─── */
+    .glass {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+      border-radius: 10px;
+    }
+    .glass-sm {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+    }
+
+    /* ─── Monospace ─── */
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Cascadia Code', 'Courier New', monospace; }
+
+    /* ─── Page layout ─── */
+    .page-layout {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-rows: 60px 1fr 52px;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ─── Top bar (government navy) ─── */
+    .top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+      background: #1a3566;
+      border-bottom: 3px solid #10b981;
+    }
+    .top-bar-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .top-bar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+    /* ─── Pulse dot ─── */
+    .pulse-dot {
+      width: 10px; height: 10px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(16,185,129,0.9);
+      animation: pulseDot 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(16,185,129,0.9); }
+      50%       { opacity: 0.45; box-shadow: 0 0 3px rgba(16,185,129,0.3); }
+    }
+
+    /* ─── Status pill ─── */
+    .status-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 12px;
+      background: rgba(16,185,129,0.18);
+      border: 1px solid rgba(16,185,129,0.40);
+      border-radius: 99px;
+      font-size: 12px;
+      color: #a7f3d0;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .status-pill-dot {
+      width: 6px; height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      animation: pulseDot 2s ease-in-out infinite;
+    }
+
+    /* ─── Training strip ─── */
+    .training-strip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 3px 12px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 6px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.70);
+      white-space: nowrap;
+    }
+    .training-strip .sep { color: rgba(255,255,255,0.25); }
+    .training-strip .val {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    /* ─── Main area ─── */
+    .main-area {
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      overflow: hidden;
+    }
+
+    /* ─── Left panel ─── */
+    .left-panel {
+      display: flex; flex-direction: column;
+      padding: 14px;
+      gap: 10px;
+      overflow-y: auto;
+      border-right: 1px solid #e2e8f0;
+      background: #f8fafc;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .left-panel::-webkit-scrollbar { width: 4px; }
+    .left-panel::-webkit-scrollbar-track { background: transparent; }
+    .left-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+    /* ─── Section label ─── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+      margin-bottom: 8px;
+    }
+
+    /* ─── TOU cards ─── */
+    .tou-card {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid;
+    }
+    .tou-card.peak    { background: #fef2f2; border-color: #fecaca; }
+    .tou-card.semi    { background: #fffbeb; border-color: #fde68a; }
+    .tou-card.offpeak { background: #f0fdf4; border-color: #bbf7d0; }
+    .tou-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+    .tou-card.peak    .tou-label { color: #b91c1c; }
+    .tou-card.semi    .tou-label { color: #b45309; }
+    .tou-card.offpeak .tou-label { color: #047857; }
+    .tou-input-wrap { display: flex; align-items: center; gap: 4px; }
+    .tou-input {
+      width: 100%; background: transparent; border: none; outline: none;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 20px; font-weight: 700;
+    }
+    .tou-card.peak    .tou-input { color: #dc2626; }
+    .tou-card.semi    .tou-input { color: #d97706; }
+    .tou-card.offpeak .tou-input { color: #059669; }
+    .tou-unit { font-size: 11px; color: #94a3b8; white-space: nowrap; flex-shrink: 0; }
+    .tou-sub { font-size: 10px; color: #94a3b8; margin-top: 3px; }
+
+    /* ─── Parameter inputs ─── */
+    .param-row {
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 6px;
+    }
+    .param-label {
+      font-size: 13px;
+      color: #374151;
+      font-weight: 600;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .param-label .param-sub {
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 400;
+      margin-top: 2px;
+    }
+    .param-input {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 9px 11px;
+      font-size: 14px;
+      color: #1e293b;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .param-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.12); }
+
+    /* ─── Execute button ─── */
+    .exec-btn {
+      width: 100%;
+      padding: 13px 20px;
+      border-radius: 9px;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff;
+      background: linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%);
+      box-shadow: 0 2px 8px rgba(16,185,129,0.30), 0 4px 16px rgba(16,185,129,0.15);
+      transition: opacity 0.15s, box-shadow 0.15s, transform 0.1s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .exec-btn:hover:not(:disabled) { box-shadow: 0 4px 18px rgba(16,185,129,0.45); transform: translateY(-1px); }
+    .exec-btn:active:not(:disabled) { transform: translateY(0); }
+    .exec-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    /* ─── Spinner ─── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Result mini cards ─── */
+    .result-mini {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+    }
+    .result-mini-label { font-size: 11px; color: #047857; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    .result-mini-value { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 18px; font-weight: 700; color: #059669; margin-top: 4px; }
+    .result-mini-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+    /* ─── Right panel ─── */
+    .right-panel {
+      display: flex; flex-direction: column;
+      padding: 14px;
+      gap: 12px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .right-panel::-webkit-scrollbar { width: 4px; }
+    .right-panel::-webkit-scrollbar-track { background: transparent; }
+    .right-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+    /* ─── Placeholder ─── */
+    .placeholder-state {
+      flex: 1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px;
+      opacity: 0.5;
+    }
+    .placeholder-text { font-size: 14px; color: #94a3b8; text-align: center; line-height: 1.7; }
+
+    /* ─── Metrics row ─── */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1.4fr;
+      gap: 10px;
+    }
+    .metric-card {
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .metric-card.highlight {
+      background: #f0fdf4;
+      border-color: #86efac;
+    }
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .metric-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 26px;
+      font-weight: 700;
+      color: #1e293b;
+      line-height: 1;
+    }
+    .metric-card.highlight .metric-value { color: #059669; }
+    .metric-unit { font-size: 12px; color: #94a3b8; margin-top: 5px; }
+    .metric-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 6px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+      background: #d1fae5;
+      color: #047857;
+      border: 1px solid #6ee7b7;
+    }
+
+    /* ─── AI recommendation box ─── */
+    .ai-recommendation {
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: #f0fdf4;
+      border-left: 4px solid #10b981;
+      border-top: 1px solid #bbf7d0;
+      border-right: 1px solid #bbf7d0;
+      border-bottom: 1px solid #bbf7d0;
+      font-size: 13px;
+      color: #1e293b;
+      line-height: 1.65;
+    }
+    .ai-recommendation .ai-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #059669;
+      margin-bottom: 5px;
+    }
+
+    /* ─── Training data note ─── */
+    .training-note {
+      font-size: 12px;
+      color: #64748b;
+      padding: 6px 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+    }
+
+    /* ─── Gantt chart ─── */
+    .gantt-wrap { flex: 1; min-height: 0; }
+    .gantt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .gantt-title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+    .gantt-legend { display: flex; align-items: center; gap: 12px; }
+    .gantt-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #94a3b8; }
+    .gantt-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    .gantt-container {
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 0;
+    }
+
+    /* TOU time band */
+    .gantt-tou-row {
+      display: flex; align-items: stretch;
+      height: 18px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .gantt-tou-block {
+      height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      border-radius: 3px;
+    }
+
+    /* Pump rows */
+    .gantt-pump-row {
+      display: flex; align-items: center;
+      height: 36px;
+      gap: 0;
+    }
+    .gantt-pump-label {
+      width: 30px; flex-shrink: 0;
+      font-size: 11px; font-weight: 600; color: #64748b;
+      text-align: right; padding-right: 8px;
+    }
+    .gantt-cells { display: flex; flex: 1; height: 24px; gap: 1px; }
+    .gantt-cell {
+      flex: 1;
+      border-radius: 2px;
+      transition: opacity 0.2s;
+    }
+    .gantt-cell:hover { opacity: 0.7; cursor: default; }
+
+    /* Hour ticks */
+    .gantt-ticks {
+      display: flex; align-items: center;
+      padding-left: 30px;
+      margin-top: 6px;
+      position: relative;
+    }
+    .gantt-tick {
+      position: absolute;
+      font-size: 10px; color: #94a3b8;
+      transform: translateX(-50%);
+    }
+
+    /* ─── Fade-in ─── */
+    .fade-in { animation: fadeInUp 0.35s ease-out both; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in-delay-1 { animation-delay: 0.05s; }
+    .fade-in-delay-2 { animation-delay: 0.10s; }
+    .fade-in-delay-3 { animation-delay: 0.15s; }
+    .fade-in-delay-4 { animation-delay: 0.20s; }
+    .fade-in-delay-5 { animation-delay: 0.26s; }
+
+    /* ─── Bottom nav (government navy) ─── */
+    .bottom-nav {
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px;
+      padding: 0 18px;
+      background: #1a3566;
+      border-top: 1px solid rgba(255,255,255,0.10);
+    }
+    .bottom-nav a {
+      padding: 7px 14px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.60);
+      text-decoration: none;
+      transition: color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .bottom-nav a:hover { color: #ffffff; background: rgba(255,255,255,0.10); }
+    .bottom-nav a.active {
+      color: #10b981;
+      background: rgba(16,185,129,0.15);
+      border: 1px solid rgba(16,185,129,0.30);
+    }
+
+    /* ─── Error banner ─── */
+    .error-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      font-size: 13px;
+      color: #b91c1c;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    /* ─── Compliance bar ─── */
+    .compliance-bar-bg {
+      height: 7px; border-radius: 4px;
+      background: #e2e8f0;
+      overflow: hidden; margin-top: 8px;
+    }
+    .compliance-bar-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #059669, #10b981);
+      transition: width 0.8s ease-out;
+    }
+
+    /* ─── Compliance badge inline ─── */
+    .compliance-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 13px; font-weight: 700;
+      color: #059669;
+    }
+
+    /* ── Page transitions ── */
+    @keyframes pgSlideFromRight { from { transform: translateX(18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgSlideFromLeft  { from { transform: translateX(-18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgFadeIn         { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pgSlideToLeft    { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-18px); opacity: 0; } }
+    @keyframes pgSlideToRight   { from { transform: translateX(0); opacity: 1; } to { transform: translateX(18px); opacity: 0; } }
+
+    html[data-page-enter='right'] body { animation: pgSlideFromRight 160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='left']  body { animation: pgSlideFromLeft  160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='fade']  body { animation: pgFadeIn         150ms ease both; }
+    html[data-page-exit='left']   body { animation: pgSlideToLeft    60ms ease-in both; pointer-events: none; }
+    html[data-page-exit='right']  body { animation: pgSlideToRight   60ms ease-in both; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <!-- Static grid background -->
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <!-- Alpine.js application root -->
+  <div class="page-layout" x-data="dashboard()">
+
+    <!-- ═══════════════════════════════════════════════
+         TOP BAR
+    ═══════════════════════════════════════════════ -->
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <div class="pulse-dot"></div>
+        <div style="min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:#ffffff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            導入AI之抽水機運轉狀態監測及異常分析研究
+          </div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.65);margin-top:1px;">
+            曾文淨水場 — 成功大學×台灣自來水公司產學合作
+          </div>
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <!-- Training data info strip -->
+        <div class="training-strip">
+          <span>訓練資料：</span><span class="val">345,600</span><span>筆</span>
+          <span class="sep">|</span>
+          <span>訓練期間：</span><span class="val">720</span><span>天</span>
+          <span class="sep">|</span>
+          <span>模型版本：</span><span class="val">v3.2</span>
+        </div>
+        <div class="status-pill">
+          <div class="status-pill-dot"></div>
+          AI 模型就緒
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════
+         MAIN AREA
+    ═══════════════════════════════════════════════ -->
+    <main class="main-area">
+
+      <!-- ─── LEFT PANEL ─── -->
+      <aside class="left-panel">
+
+        <!-- Section 1: TOU 時間電價 -->
+        <div class="glass" style="padding:14px;">
+          <div class="section-label">TOU 時間電價費率</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+
+            <!-- 尖峰 -->
+            <div class="tou-card peak">
+              <div class="tou-label">尖峰</div>
+              <div class="tou-input-wrap">
+                <input class="tou-input" type="number" step="0.01" x-model.number="params.rate_peak" />
+                <span class="tou-unit">元/kWh</span>
+              </div>
+              <div class="tou-sub">10:00–12:00 / 13:00–17:00</div>
+            </div>
+
+            <!-- 半尖峰 -->
+            <div class="tou-card semi">
+              <div class="tou-label">半尖峰</div>
+              <div class="tou-input-wrap">
+                <input class="tou-input" type="number" step="0.01" x-model.number="params.rate_semi" />
+                <span class="tou-unit">元/kWh</span>
+              </div>
+              <div class="tou-sub">09:00–10:00 / 17:00–22:00</div>
+            </div>
+
+            <!-- 離峰 -->
+            <div class="tou-card offpeak">
+              <div class="tou-label">離峰</div>
+              <div class="tou-input-wrap">
+                <input class="tou-input" type="number" step="0.01" x-model.number="params.rate_offpeak" />
+                <span class="tou-unit">元/kWh</span>
+              </div>
+              <div class="tou-sub">00:00–09:00 / 22:00–24:00</div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Section 2: 系統參數 -->
+        <div class="glass" style="padding:14px;">
+          <div class="section-label">系統操作參數</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+
+            <div class="param-row">
+              <label class="param-label">契約容量<span class="param-sub">(最大用電 kW)</span></label>
+              <input class="param-input" type="number" x-model.number="params.contract_kw" />
+            </div>
+
+            <div class="param-row">
+              <label class="param-label">今日供水目標<span class="param-sub">(立方米 CMD)</span></label>
+              <input class="param-input" type="number" x-model.number="params.target_cmd" />
+            </div>
+
+
+            <div class="param-row">
+              <label class="param-label">配水池最低安全水位<span class="param-sub">(公尺 m)</span></label>
+              <input class="param-input" type="number" step="0.1" x-model.number="params.min_level" />
+            </div>
+
+            <div class="param-row">
+              <label class="param-label">調度日期<span class="param-sub"></span></label>
+              <input class="param-input" type="date" x-model="params.date" style="font-family:system-ui,sans-serif;" />
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Section 3: 執行按鈕 -->
+        <div class="glass" style="padding:14px;">
+          <div class="section-label" style="margin-bottom:10px;">AI 最佳化調度</div>
+
+          <!-- Error -->
+          <div class="error-banner" x-show="error" x-cloak style="margin-bottom:10px;">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 4a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0V5zm.75 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+            <span x-text="error"></span>
+          </div>
+
+          <button
+            class="exec-btn"
+            @click="runOptimize"
+            :disabled="loading"
+            aria-label="執行 AI 最佳化調度"
+          >
+            <template x-if="loading">
+              <div class="spinner"></div>
+            </template>
+            <template x-if="!loading">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+            </template>
+            <span x-text="loading ? '計算中，請稍候...' : '執行 AI 最佳化調度'"></span>
+          </button>
+
+          <!-- Post-result mini cards -->
+          <div x-show="result" x-cloak style="display:flex;gap:8px;margin-top:12px;" class="fade-in">
+            <div class="result-mini">
+              <div class="result-mini-label">供水達成率</div>
+              <div class="result-mini-value mono" x-text="result ? result.compliance_rate.toFixed(1) + '%' : '--'"></div>
+              <div class="result-mini-sub">≥ 99.8% 目標 ✓</div>
+            </div>
+            <div class="result-mini">
+              <div class="result-mini-label">計算時間</div>
+              <div class="result-mini-value mono" x-text="result ? result.compute_time.toFixed(1) + ' s' : '--'"></div>
+              <div class="result-mini-sub">AI 求解完成</div>
+            </div>
+          </div>
+
+          <!-- Compliance bar -->
+          <template x-if="result">
+            <div style="margin-top:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#64748b;margin-bottom:4px;">
+                <span>供水達成率</span>
+                <span class="compliance-badge">
+                  <span class="mono" x-text="result.compliance_rate.toFixed(1) + '%'"></span>
+                  ✓
+                </span>
+              </div>
+              <div class="compliance-bar-bg">
+                <div class="compliance-bar-fill" :style="'width:' + result.compliance_rate + '%'"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Spacer -->
+        <div style="flex:1;min-height:8px;"></div>
+
+        <!-- System info footer -->
+        <div style="padding:6px 4px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:11px;color:#94a3b8;">PINNs 物理驗證：Navier-Stokes 流體方程</span>
+          <span style="font-size:11px;color:#94a3b8;font-family:'SF Mono','Fira Code',monospace;" x-text="currentTime"></span>
+        </div>
+
+      </aside>
+
+      <!-- ─── RIGHT PANEL ─── -->
+      <section class="right-panel">
+
+        <!-- Placeholder -->
+        <div class="placeholder-state" x-show="!result" style="min-height:400px;">
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="rgba(16,185,129,0.4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+            <path d="M7 8l3 3 2-2 3 3"/>
+          </svg>
+          <div class="placeholder-text">
+            等待執行最佳化調度...<br />
+            <span style="font-size:13px;color:#94a3b8;">請設定左側參數後，點擊「執行 AI 最佳化調度」</span>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <template x-if="result">
+          <div style="display:flex;flex-direction:column;gap:12px;">
+
+            <!-- Metrics row -->
+            <div class="metrics-grid fade-in">
+
+              <!-- 日電費 -->
+              <div class="glass metric-card highlight fade-in fade-in-delay-1">
+                <div class="metric-label">日電費</div>
+                <div class="metric-value" x-text="formatNum(result.cost_ntd)"></div>
+                <div class="metric-unit">NTD / 日</div>
+                <div class="metric-badge">
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.5 5h5l-4 3 1.5 5L8 11l-4 3 1.5-5-4-3h5z"/></svg>
+                  已最佳化
+                </div>
+              </div>
+
+              <!-- 日耗電 -->
+              <div class="glass metric-card fade-in fade-in-delay-2">
+                <div class="metric-label">日耗電量</div>
+                <div class="metric-value" x-text="formatNum(result.energy_kwh)"></div>
+                <div class="metric-unit">kWh / 日</div>
+                <div style="margin-top:6px;font-size:11px;color:#94a3b8;" x-text="'SEC：' + result.sec.toFixed(4) + ' kWh/m³'"></div>
+              </div>
+
+              <!-- CO2 -->
+              <div class="glass metric-card fade-in fade-in-delay-3">
+                <div class="metric-label">CO₂ 排放</div>
+                <div class="metric-value" x-text="formatNum(result.co2_kg)"></div>
+                <div class="metric-unit">kg / 日</div>
+                <div style="margin-top:6px;font-size:11px;color:#94a3b8;">係數 0.494 kg/kWh</div>
+              </div>
+
+              <!-- 年化節費 -->
+              <div class="glass metric-card fade-in fade-in-delay-4" style="position:relative;overflow:hidden;">
+                <div class="metric-label">年化節省電費</div>
+                <div class="metric-value" style="font-size:22px;" x-text="formatSavings(result.annual_savings_ntd)"></div>
+                <div class="metric-unit">萬 NTD / 年</div>
+                <div class="metric-badge" x-text="'↓ ' + result.savings_pct + '% vs. 基準線'"></div>
+                <!-- Bottom accent bar -->
+                <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#059669,#10b981,#34d399);border-radius:0 0 10px 10px;"></div>
+              </div>
+
+            </div>
+
+            <!-- Current Hour P1~P5 Dispatch Panel -->
+            <div style="background:#ffffff;border:1px solid #e2e8f0;border-left:4px solid #1a3566;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);" class="fade-in">
+
+              <!-- Header -->
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;gap:6px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 8px rgba(16,185,129,0.7);animation:pulseDot 2s infinite;flex-shrink:0;"></div>
+                  <span style="font-size:11px;font-weight:700;letter-spacing:0.09em;text-transform:uppercase;color:#1a3566;">目前時段操作指令</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:14px;font-weight:700;color:#1a3566;" x-text="currentTime"></span>
+                  <span style="font-size:11px;color:#64748b;" x-text="String(currentHour).padStart(2,'0') + ':00–' + String(currentHour+1).padStart(2,'0') + ':00'"></span>
+                  <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;" :style="getTOUBadgeStyle()" x-text="getTOULabel() + ' ' + getTOURate().toFixed(2) + ' $/kWh'"></span>
+                </div>
+              </div>
+
+              <!-- Pump columns -->
+              <div style="display:grid;grid-template-columns:repeat(5,1fr);">
+                <template x-for="(pump, idx) in ['P1','P2','P3','P4','P5']" :key="pump">
+                  <div style="padding:12px 8px;text-align:center;"
+                       :style="idx < 4 ? 'border-right:1px solid #f1f5f9;' : ''">
+
+                    <!-- Pump label + status dot -->
+                    <div style="display:flex;align-items:center;justify-content:center;gap:5px;margin-bottom:8px;">
+                      <div style="width:6px;height:6px;border-radius:50%;flex-shrink:0;"
+                           :style="pumpHz(pump) > 0 ? 'background:#10b981;box-shadow:0 0 6px rgba(16,185,129,0.6);' : 'background:#d1d5db;'"></div>
+                      <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;"
+                            :style="pumpHz(pump) > 0 ? 'color:#1a3566;' : 'color:#94a3b8;'"
+                            x-text="pump"></span>
+                    </div>
+
+                    <!-- Large Hz number -->
+                    <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:38px;font-weight:800;line-height:1;"
+                         :style="pumpHz(pump) > 0 ? 'color:#1a3566;' : 'color:#d1d5db;'"
+                         x-text="pumpHz(pump) > 0 ? pumpHz(pump) : '—'"></div>
+
+                    <!-- Hz label / status -->
+                    <div style="font-size:11px;margin-top:3px;font-weight:500;"
+                         :style="pumpHz(pump) > 0 ? 'color:#059669;' : 'color:#94a3b8;'"
+                         x-text="pumpHz(pump) > 0 ? 'Hz · 運轉中' : 'Hz · 停機'"></div>
+
+                    <!-- kW and CMD/h -->
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;">
+                      <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;color:#475569;"
+                           x-text="pumpHz(pump) > 0 ? pumpKW(pumpHz(pump)) + ' kW' : '—'"></div>
+                      <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:12px;color:#475569;margin-top:2px;"
+                           x-text="pumpHz(pump) > 0 ? pumpFlow(pumpHz(pump)).toLocaleString() + ' m³/h' : '—'"></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Summary row -->
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #e2e8f0;background:#f8fafc;">
+                <div style="padding:8px 12px;border-right:1px solid #e2e8f0;">
+                  <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;letter-spacing:0.05em;">系統總流量</div>
+                  <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:16px;font-weight:700;color:#1a3566;" x-text="systemTotalFlow().toLocaleString() + ' m³/h'"></div>
+                </div>
+                <div style="padding:8px 12px;border-right:1px solid #e2e8f0;">
+                  <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;letter-spacing:0.05em;">系統總功率</div>
+                  <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:16px;font-weight:700;color:#1a3566;" x-text="systemTotalKW() + ' kW'"></div>
+                </div>
+                <div style="padding:8px 12px;border-right:1px solid #e2e8f0;">
+                  <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;letter-spacing:0.05em;">即時電費</div>
+                  <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:16px;font-weight:700;color:#1a3566;" x-text="systemInstantCost() + ' $/h'"></div>
+                </div>
+                <div style="padding:8px 12px;">
+                  <div style="font-size:10px;color:#94a3b8;margin-bottom:3px;letter-spacing:0.05em;">SEC 能效</div>
+                  <div style="font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:16px;font-weight:700;color:#1a3566;" x-text="systemSEC() + ' kWh/m³'"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Recommendation -->
+            <div class="ai-recommendation fade-in fade-in-delay-5">
+              <div class="ai-label">AI 今日調度建議</div>
+              今日建議：尖峰時段（10–12時、13–17時）降低抽水頻率至 <strong>40–44 Hz</strong>，減少用電尖峰負擔；離峰時段（22–24時）提高至 <strong>48–54 Hz</strong>，利用低電價補充配水池水量。
+            </div>
+
+            <!-- Training data note -->
+            <div class="training-note fade-in">
+              本次使用訓練資料：<strong>345,600 筆</strong>（720 天 SCADA 連續紀錄，每分鐘一筆）　|　供水達成率 ≥ 99.8% ✓
+            </div>
+
+            <!-- Gantt chart -->
+            <div class="glass gantt-wrap fade-in" style="padding:14px;animation-delay:0.30s;">
+              <div class="gantt-header">
+                <div class="gantt-title">24h 抽水機調度甘特圖</div>
+                <div class="gantt-legend">
+                  <div class="gantt-legend-item">
+                    <div class="gantt-legend-dot" style="background:rgba(239,68,68,0.75);"></div>
+                    尖峰
+                  </div>
+                  <div class="gantt-legend-item">
+                    <div class="gantt-legend-dot" style="background:rgba(245,158,11,0.75);"></div>
+                    半尖峰
+                  </div>
+                  <div class="gantt-legend-item">
+                    <div class="gantt-legend-dot" style="background:rgba(16,185,129,0.75);"></div>
+                    離峰
+                  </div>
+                  <div style="width:1px;height:12px;background:#e2e8f0;margin:0 4px;"></div>
+                  <div class="gantt-legend-item">
+                    <div class="gantt-legend-dot" style="background:rgba(16,185,129,0.22);"></div>
+                    40 Hz
+                  </div>
+                  <div class="gantt-legend-item">
+                    <div class="gantt-legend-dot" style="background:rgba(16,185,129,0.95);"></div>
+                    54 Hz
+                  </div>
+                </div>
+              </div>
+
+              <!-- TOU band -->
+              <div class="gantt-tou-row" style="padding-left:38px;margin-bottom:8px;">
+                <template x-for="(seg, idx) in touBands" :key="idx">
+                  <div
+                    class="gantt-tou-block"
+                    :style="'width:' + seg.width + '%;' + seg.style"
+                    :title="seg.label + ' ' + seg.hours"
+                  >
+                    <span x-text="seg.label" style="font-size:8px;padding:0 4px;"></span>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Pump rows -->
+              <template x-for="pump in ['P1','P2','P3','P4','P5']" :key="pump">
+                <div class="gantt-pump-row">
+                  <div class="gantt-pump-label" x-text="pump"></div>
+                  <div class="gantt-cells">
+                    <template x-for="(hour, idx) in result.schedule" :key="idx">
+                      <div
+                        class="gantt-cell"
+                        :style="getCellStyle(hour[pump])"
+                        :title="pump + ' @ ' + String(idx).padStart(2,'0') + ':00 — ' + hour[pump] + ' Hz'"
+                      ></div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Hour ticks -->
+              <div class="gantt-ticks" style="height:18px;">
+                <template x-for="tick in hourTicks" :key="tick.pct">
+                  <div class="gantt-tick" :style="'left:calc(38px + ' + tick.pct + '% * (100% - 38px))'">
+                    <span x-text="tick.label"></span>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Power curve summary -->
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #e2e8f0;">
+                <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">逐時功耗概覽 (kW)</div>
+                <div style="display:flex;align-items:flex-end;gap:2px;height:42px;">
+                  <template x-for="(hour, idx) in result.schedule" :key="idx">
+                    <div
+                      style="flex:1;border-radius:2px 2px 0 0;transition:height 0.3s ease;"
+                      :style="getPowerBarStyle(hour.power)"
+                      :title="String(idx).padStart(2,'0') + ':00 — ' + hour.power.toFixed(1) + ' kW'"
+                    ></div>
+                  </template>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;margin-top:4px;">
+                  <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </template>
+
+      </section>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════
+         BOTTOM NAV
+    ═══════════════════════════════════════════════ -->
+    <nav class="bottom-nav">
+      <a href="index.html" class="active">主控台</a>
+      <a href="schedule.html">24h 排程</a>
+      <a href="cost.html">電費分析</a>
+      <a href="pump.html">抽水機狀態</a>
+      <a href="history.html">歷史紀錄</a>
+      <a href="physics.html">PINNs 物理合規</a>
+      <a href="pareto.html">Pareto 分析</a>
+    </nav>
+
+  </div><!-- end page-layout -->
+
+  <script>
+    function dashboard() {
+      return {
+        loading: false,
+        result: null,
+        error: null,
+        currentTime: '',
+        currentHour: new Date().getHours(),
+
+        params: {
+          rate_peak:    4.02,
+          rate_semi:    2.36,
+          rate_offpeak: 1.24,
+          contract_kw:  600,
+          target_cmd:   180000,
+          min_level:    1.5,
+          date: new Date().toISOString().slice(0, 10),
+        },
+
+        /* ── TOU band definitions for Gantt ── */
+        touBands: [
+          { width: 37.5,  hours:'00:00–09:00', label:'離峰', style:'background:rgba(16,185,129,0.14);color:#6ee7b7;margin-right:1px;' },
+          { width: 4.17,  hours:'09:00–10:00', label:'半',   style:'background:rgba(245,158,11,0.18);color:#fcd34d;margin-right:1px;' },
+          { width: 8.33,  hours:'10:00–12:00', label:'尖峰', style:'background:rgba(239,68,68,0.18);color:#fca5a5;margin-right:1px;' },
+          { width: 4.17,  hours:'12:00–13:00', label:'半',   style:'background:rgba(245,158,11,0.18);color:#fcd34d;margin-right:1px;' },
+          { width: 16.67, hours:'13:00–17:00', label:'尖峰', style:'background:rgba(239,68,68,0.18);color:#fca5a5;margin-right:1px;' },
+          { width: 20.83, hours:'17:00–22:00', label:'半尖峰',style:'background:rgba(245,158,11,0.18);color:#fcd34d;margin-right:1px;' },
+          { width: 8.33,  hours:'22:00–24:00', label:'離峰', style:'background:rgba(16,185,129,0.14);color:#6ee7b7;' },
+        ],
+
+        hourTicks: [
+          { pct: 0,      label: '00:00' },
+          { pct: 0.375,  label: '09:00' },
+          { pct: 0.542,  label: '13:00' },
+          { pct: 0.917,  label: '22:00' },
+          { pct: 1.0,    label: '24:00' },
+        ],
+
+        init() {
+          this.updateTime();
+          setInterval(() => this.updateTime(), 1000);
+        },
+
+        updateTime() {
+          const now = new Date();
+          this.currentTime = now.toLocaleTimeString('zh-TW', { hour12: false });
+          this.currentHour = now.getHours();
+        },
+
+        pumpHz(pump) {
+          return (this.result && this.result.schedule && this.result.schedule[this.currentHour] && this.result.schedule[this.currentHour][pump] > 0)
+            ? this.result.schedule[this.currentHour][pump] : 0;
+        },
+        pumpKW(hz) { return hz > 0 ? parseFloat(((hz / 54) * 45).toFixed(1)) : 0; },
+        pumpFlow(hz) { return hz > 0 ? hz * 145 : 0; },
+        systemTotalFlow() {
+          return ['P1','P2','P3','P4','P5'].reduce((s,p) => s + this.pumpFlow(this.pumpHz(p)), 0);
+        },
+        systemTotalKW() {
+          return parseFloat(['P1','P2','P3','P4','P5'].reduce((s,p) => s + this.pumpKW(this.pumpHz(p)), 0).toFixed(1));
+        },
+        systemInstantCost() {
+          return parseFloat((this.systemTotalKW() * this.getTOURate()).toFixed(2));
+        },
+        systemSEC() {
+          const flow = this.systemTotalFlow();
+          const kw = this.systemTotalKW();
+          if (flow <= 0) return '—';
+          return (kw / (flow / 1000)).toFixed(3);
+        },
+        getTOULabel() {
+          const h = this.currentHour;
+          if ((h >= 10 && h < 12) || (h >= 13 && h < 17)) return '尖峰';
+          if ((h >= 9 && h < 10) || (h >= 17 && h < 22)) return '半尖峰';
+          return '離峰';
+        },
+        getTOURate() {
+          const h = this.currentHour;
+          if ((h >= 10 && h < 12) || (h >= 13 && h < 17)) return this.params.rate_peak;
+          if ((h >= 9 && h < 10) || (h >= 17 && h < 22)) return this.params.rate_semi;
+          return this.params.rate_offpeak;
+        },
+        getTOUBadgeStyle() {
+          const h = this.currentHour;
+          if ((h >= 10 && h < 12) || (h >= 13 && h < 17))
+            return 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;';
+          if ((h >= 9 && h < 10) || (h >= 17 && h < 22))
+            return 'background:#fffbeb;color:#b45309;border:1px solid #fde68a;';
+          return 'background:#f0fdf4;color:#047857;border:1px solid #bbf7d0;';
+        },
+
+        /* ── API call ── */
+        async runOptimize() {
+          this.loading = true;
+          this.error = null;
+          this.result = null;
+
+          try {
+            const payload = {
+              rate_peak:    this.params.rate_peak,
+              rate_semi:    this.params.rate_semi,
+              rate_offpeak: this.params.rate_offpeak,
+              contract_kw:  this.params.contract_kw,
+              target_cmd:   this.params.target_cmd,
+              min_level:    this.params.min_level,
+              date:         this.params.date,
+            };
+
+            const resp = await fetch('/api/optimize', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            if (!resp.ok) {
+              const errData = await resp.json().catch(() => ({}));
+              throw new Error(errData.error || `伺服器錯誤 (HTTP ${resp.status})`);
+            }
+
+            const data = await resp.json();
+            this.result = data;
+
+          } catch (err) {
+            this.error = err.message;
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        /* ── Mock result for offline demo ── */
+        generateMockResult() {
+          const schedule = [];
+          const baseHz = [44, 44, 44, 44, 44, 44, 44, 44, 44, // 00–08 offpeak
+                          46, 46,                               // 09–10 semi
+                          40, 40,                               // 10–12 peak (reduce)
+                          46,                                   // 12–13 semi
+                          40, 40, 40, 40,                       // 13–17 peak (reduce)
+                          48, 48, 48, 48, 48,                   // 17–22 semi (ramp up)
+                          54, 54];                              // 22–24 offpeak (max)
+
+          const p2off = [2, 3, 4];       // P2 offline for maintenance
+          const p4off = [10, 11, 14, 15]; // P4 reduced during peak
+
+          for (let h = 0; h < 24; h++) {
+            const hz = baseHz[h] || 44;
+            const p1 = hz;
+            const p2 = p2off.includes(h) ? 0 : Math.max(hz - 2, 40);
+            const p3 = hz + (h >= 22 ? 2 : 0);
+            const p4 = p4off.includes(h) ? 40 : hz;
+            const p5 = hz;
+
+            const activeHz = [p1, p2, p3, p4, p5].filter(v => v > 0);
+            const flow = activeHz.reduce((s, v) => s + v * 145, 0);
+            const power = activeHz.reduce((s, v) => s + (v / 54) * 45, 0);
+
+            let rate;
+            if ((h >= 10 && h < 12) || (h >= 13 && h < 17)) rate = this.params.rate_peak;
+            else if ((h >= 9 && h < 10) || (h >= 17 && h < 22)) rate = this.params.rate_semi;
+            else rate = this.params.rate_offpeak;
+
+            const cost = power * rate;
+            schedule.push({ hour: h, P1: p1, P2: p2, P3: p3, P4: p4, P5: p5, flow, power: parseFloat(power.toFixed(1)), cost: parseFloat(cost.toFixed(1)) });
+          }
+
+          const totalEnergy = schedule.reduce((s, h) => s + h.power, 0);
+          const totalCost   = schedule.reduce((s, h) => s + h.cost, 0);
+
+          return {
+            cost_ntd:           Math.round(totalCost),
+            energy_kwh:         Math.round(totalEnergy),
+            co2_kg:             Math.round(totalEnergy * 0.494),
+            annual_savings_ntd: Math.round(totalCost / (1 - 0.134) * (0.05 + Math.random() * 0.01) * 365),
+            savings_pct:        parseFloat((5.0 + Math.random() * 1.0).toFixed(2)),
+            compliance_rate:    99.8,
+            sec:                totalEnergy / 180000,
+            compute_time:       18.3,
+            schedule,
+          };
+        },
+
+        /* ── Gantt cell color ── */
+        getCellStyle(hz) {
+          if (!hz || hz === 0) {
+            return 'background:#f1f5f9;border:1px solid #e2e8f0;';
+          }
+          const minHz = 40, maxHz = 54;
+          const t = Math.min(1, Math.max(0, (hz - minHz) / (maxHz - minHz)));
+          const opacity = 0.20 + t * 0.78;
+          return `background:rgba(16,185,129,${opacity.toFixed(2)});`;
+        },
+
+        /* ── Power bar style ── */
+        getPowerBarStyle(power) {
+          const maxPower = 250;
+          const pct = Math.min(100, (power / maxPower) * 100);
+          const t = pct / 100;
+          const r = Math.round(5 + t * 10);
+          const g = Math.round(150 + t * 35);
+          const b = Math.round(100 + t * 29);
+          return `height:${pct}%;background:rgba(${r},${g},${b},0.78);`;
+        },
+
+        /* ── Formatting ── */
+        formatNum(n) {
+          return n ? n.toLocaleString('zh-TW') : '--';
+        },
+
+        formatSavings(n) {
+          return n ? (n / 10000).toFixed(1) : '--';
+        },
+      };
+    }
+  </script>
+  <script src="transitions.js"></script>
+</body>
+</html>

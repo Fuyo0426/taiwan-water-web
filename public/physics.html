@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PINNs 物理合規 — 曾文淨水場 AI 節能系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --accent: #10b981;
+      --glass-bg: #ffffff;
+      --glass-border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f0f4f8; color: #1e293b; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; }
+    .glass {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      border-radius: 12px;
+    }
+    .nav-link { color: #64748b; text-decoration: none; font-size: 0.875rem; transition: color 0.2s; padding: 0.25rem 0.5rem; border-radius: 6px; }
+    .nav-link:hover { color: #10b981; }
+    .nav-link.active { color: #10b981; background: rgba(16,185,129,0.1); }
+    .mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+    .accent { color: #10b981; }
+
+    /* Residual cards */
+    .residual-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      border-radius: 12px;
+      padding: 1.25rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .residual-card:hover {
+      border-color: rgba(16,185,129,0.3);
+      transform: translateY(-2px);
+    }
+    .residual-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #10b981, #059669);
+    }
+    .residual-card.r4::before {
+      background: linear-gradient(90deg, #10b981, #6ee7b7);
+      opacity: 0.75;
+    }
+    .residual-card.r5::before {
+      background: linear-gradient(90deg, #10b981, #a7f3d0);
+      opacity: 0.85;
+    }
+
+    /* Code block */
+    .eq-block {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.875rem 1rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.8rem;
+      color: #059669;
+      line-height: 1.6;
+      overflow-x: auto;
+    }
+    .eq-label {
+      color: #047857;
+      font-weight: bold;
+    }
+    .eq-comment {
+      color: #94a3b8;
+    }
+
+    /* Radar SVG */
+    .radar-wrap svg { display: block; margin: 0 auto; }
+
+    /* Bottom nav */
+    .bottom-nav { background: #1a3566; border-top: 1px solid #e2e8f0; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.4); }
+
+    /* ── Page transitions ── */
+    @keyframes pgSlideFromRight { from { transform: translateX(18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgSlideFromLeft  { from { transform: translateX(-18px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pgFadeIn         { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pgSlideToLeft    { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-18px); opacity: 0; } }
+    @keyframes pgSlideToRight   { from { transform: translateX(0); opacity: 1; } to { transform: translateX(18px); opacity: 0; } }
+    html[data-page-enter='right'] body { animation: pgSlideFromRight 160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='left']  body { animation: pgSlideFromLeft  160ms cubic-bezier(0.16,1,0.3,1) both; }
+    html[data-page-enter='fade']  body { animation: pgFadeIn         150ms ease both; }
+    html[data-page-exit='left']   body { animation: pgSlideToLeft    60ms ease-in both; pointer-events: none; }
+    html[data-page-exit='right']  body { animation: pgSlideToRight   60ms ease-in both; pointer-events: none; }
+  </style>
+</head>
+<body x-data="physicsApp()" x-init="init()">
+
+  <!-- ── Top Bar ── -->
+  <header style="display:flex;align-items:center;padding:0 24px;height:56px;border-bottom:1px solid #e2e8f0;gap:10px;position:sticky;top:0;z-index:50;background:#1a3566;flex-shrink:0;">
+    <div style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 10px rgba(16,185,129,0.7);animation:pulse 2s ease-in-out infinite;flex-shrink:0;"></div>
+    <span style="font-size:13px;font-weight:700;letter-spacing:0.05em;color:#ffffff;white-space:nowrap;">AI 抽水機運轉研究系統</span>
+    <span style="font-size:11px;color:rgba(255,255,255,0.60);white-space:nowrap;">曾文淨水場 — 成大×台水</span>
+    <nav style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+      <span style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);color:#10b981;font-size:11px;padding:3px 10px;border-radius:100px;white-space:nowrap;">● MPC 就緒</span>
+      <a href="index.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">主控台</a>
+      <a href="schedule.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">排程</a>
+      <a href="cost.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">電費</a>
+      <a href="pump.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">泵浦</a>
+      <a href="history.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">歷史</a>
+      <a href="physics.html" style="font-size:12px;color:#10b981;padding:4px 10px;border-radius:7px;border:1px solid rgba(16,185,129,0.40);background:rgba(16,185,129,0.15);text-decoration:none;white-space:nowrap;">物理</a>
+      <a href="pareto.html" style="font-size:12px;color:rgba(255,255,255,0.65);padding:4px 10px;border-radius:7px;border:1px solid transparent;text-decoration:none;white-space:nowrap;">Pareto</a>
+    </nav>
+  </header>
+
+  <!-- ── PAGE CONTENT ──────────────────────────────────────── -->
+  <main class="px-4 pb-6 pt-5 max-w-7xl mx-auto">
+
+    <!-- Page Title -->
+    <div class="mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800">PINNs 物理合規驗證</h1>
+        <p class="text-sm text-slate-500 mt-1">Physics-Informed Neural Networks · R1–R5 殘差合規率</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <div class="w-2 h-2 rounded-full" :class="apiLoaded ? 'bg-emerald-400' : 'bg-slate-400'"></div>
+        <span class="text-slate-500" x-text="apiLoaded ? '即時數據' : 'Mock 數據'"></span>
+      </div>
+    </div>
+
+    <!-- ── SECTION 1: Compliance Bento Grid ──────────────── -->
+    <section class="mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <!-- R1 -->
+        <div class="residual-card">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500 tracking-wider">R1</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">流量親和律</span>
+          </div>
+          <p class="text-4xl font-bold mono accent mb-1" x-text="residuals.R1.compliance + '%'"></p>
+          <p class="text-xs text-slate-500 mb-3">Q ∝ n · 流量-頻率線性關係</p>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full bg-emerald-400 transition-all" :style="`width:${residuals.R1.compliance}%`"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 mono">殘差均值 <span class="text-slate-600" x-text="residuals.R1.mean_residual"></span></p>
+        </div>
+
+        <!-- R2 -->
+        <div class="residual-card">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500 tracking-wider">R2</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">功率親和律</span>
+          </div>
+          <p class="text-4xl font-bold mono accent mb-1" x-text="residuals.R2.compliance + '%'"></p>
+          <p class="text-xs text-slate-500 mb-3">P ∝ n³ · 功率-頻率三次方關係</p>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full bg-emerald-400 transition-all" :style="`width:${residuals.R2.compliance}%`"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 mono">殘差均值 <span class="text-slate-600" x-text="residuals.R2.mean_residual"></span></p>
+        </div>
+
+        <!-- R3 -->
+        <div class="residual-card">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500 tracking-wider">R3</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">禁區迴避</span>
+          </div>
+          <p class="text-4xl font-bold mono accent mb-1" x-text="residuals.R3.compliance + '%'"></p>
+          <p class="text-xs text-slate-500 mb-3">58.5 Hz 共振禁區 · 機械安全</p>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full bg-emerald-400 transition-all" :style="`width:${residuals.R3.compliance}%`"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 mono">殘差均值 <span class="text-slate-600" x-text="residuals.R3.mean_residual"></span></p>
+        </div>
+
+        <!-- R4 -->
+        <div class="residual-card r4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500 tracking-wider">R4</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">Darcy 管損</span>
+          </div>
+          <p class="text-4xl font-bold mono mb-1" style="color: #059669;" x-text="residuals.R4.compliance + '%'"></p>
+          <p class="text-xs text-slate-500 mb-3">Darcy-Weisbach 管道摩擦損失</p>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full transition-all" style="background:#6ee7b7;" :style="`width:${residuals.R4.compliance}%`"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 mono">殘差均值 <span class="text-slate-600" x-text="residuals.R4.mean_residual"></span></p>
+        </div>
+
+        <!-- R5 -->
+        <div class="residual-card r5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500 tracking-wider">R5</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-500 border border-emerald-200">空蝕邊界</span>
+          </div>
+          <p class="text-4xl font-bold mono mb-1" style="color: #10b981;" x-text="residuals.R5.compliance + '%'"></p>
+          <p class="text-xs text-slate-500 mb-3">抽水機汽蝕邊界條件保護</p>
+          <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+            <div class="h-full rounded-full transition-all" style="background:#a7f3d0;" :style="`width:${residuals.R5.compliance}%`"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2 mono">殘差均值 <span class="text-slate-600" x-text="residuals.R5.mean_residual"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECTION 2 + 3: Radar + Equations ──────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+      <!-- Radar Chart -->
+      <div class="glass p-5">
+        <h2 class="text-base font-semibold text-slate-700 mb-1">合規雷達圖</h2>
+        <p class="text-xs text-slate-500 mb-4">綠實線=實際合規 · 虛線=目標 100%</p>
+        <div class="radar-wrap flex justify-center">
+          <!-- Pentagon radar: R1 top, R2 top-right, R3 bottom-right, R4 bottom-left, R5 top-left -->
+          <!-- Center: 200,200 | Radius: 150 -->
+          <!-- Angles (top=270°): R1=270°, R2=342°, R3=54°, R4=126°, R5=198° -->
+          <!-- Points for 100%: -->
+          <!-- R1: (200, 50)  = center + 150*(cos270, sin270) = (200+0, 200-150) -->
+          <!-- R2: (200+150*cos342, 200+150*sin342) = (200+146.7, 200-46.4) = (346.7, 153.6) -->
+          <!-- R3: (200+150*cos54, 200+150*sin54) = (200+88.2, 200+121.4) = (288.2, 321.4) -->
+          <!-- R4: (200+150*cos126, 200+150*sin126) = (200-88.2, 200+121.4) = (111.8, 321.4) -->
+          <!-- R5: (200+150*cos198, 200+150*sin198) = (200-146.7, 200-46.4) = (53.3, 153.6) -->
+          <svg viewBox="0 0 400 400" width="320" height="320" xmlns="http://www.w3.org/2000/svg">
+            <!-- Background grid polygons -->
+            <!-- 25% -->
+            <polygon points="200,162.5 236.7,175.9 222.1,300.4 177.9,300.4 163.3,175.9"
+              fill="none" stroke="#e2e8f0" stroke-width="1"/>
+            <!-- 50% -->
+            <polygon points="200,125 273.4,151.8 244.1,300.7 155.9,300.7 126.6,151.8"
+              fill="none" stroke="#e2e8f0" stroke-width="1"/>
+            <!-- 75% -->
+            <polygon points="200,87.5 310.0,127.7 266.1,301.1 133.9,301.1 90.0,127.7"
+              fill="none" stroke="#cbd5e1" stroke-width="1"/>
+            <!-- 100% target polygon -->
+            <polygon points="200,50 346.7,153.6 288.2,321.4 111.8,321.4 53.3,153.6"
+              fill="none" stroke="rgba(16,185,129,0.40)" stroke-width="1.5" stroke-dasharray="4,3"/>
+
+            <!-- Axis lines from center to vertex -->
+            <line x1="200" y1="200" x2="200" y2="50" stroke="#cbd5e1" stroke-width="1"/>
+            <line x1="200" y1="200" x2="346.7" y2="153.6" stroke="#cbd5e1" stroke-width="1"/>
+            <line x1="200" y1="200" x2="288.2" y2="321.4" stroke="#cbd5e1" stroke-width="1"/>
+            <line x1="200" y1="200" x2="111.8" y2="321.4" stroke="#cbd5e1" stroke-width="1"/>
+            <line x1="200" y1="200" x2="53.3" y2="153.6" stroke="#cbd5e1" stroke-width="1"/>
+
+            <!-- Actual polygon (R1=100%, R2=100%, R3=100%, R4=98.5%, R5=99.3%) -->
+            <!-- Scale: R1=1.0 → same as 100%, R4=0.985, R5=0.993 -->
+            <!-- R1(1.0): (200, 50) -->
+            <!-- R2(1.0): (346.7, 153.6) -->
+            <!-- R3(1.0): (288.2, 321.4) -->
+            <!-- R4(0.985): center + 0.985*150 in dir=(−0.588,0.809) → (200+0.985*(−88.2), 200+0.985*121.4) = (113.1, 319.6) -->
+            <!-- R5(0.993): center + 0.993*150 in dir=(−0.978,−0.309) → (200+0.993*(−146.7), 200+0.993*(−46.4)) = (54.3, 153.9) -->
+            <polygon
+              points="200,50 346.7,153.6 288.2,321.4 113.1,319.6 54.3,153.9"
+              fill="rgba(16,185,129,0.10)"
+              stroke="#10b981"
+              stroke-width="2"
+              stroke-linejoin="round"
+            />
+
+            <!-- Data point dots -->
+            <circle cx="200" cy="50" r="4" fill="#10b981"/>
+            <circle cx="346.7" cy="153.6" r="4" fill="#10b981"/>
+            <circle cx="288.2" cy="321.4" r="4" fill="#10b981"/>
+            <circle cx="113.1" cy="319.6" r="4" fill="#6ee7b7"/>
+            <circle cx="54.3" cy="153.9" r="4" fill="#a7f3d0"/>
+
+            <!-- Axis labels -->
+            <text x="200" y="38" text-anchor="middle" fill="#10b981" font-size="12" font-weight="600">R1</text>
+            <text x="200" y="26" text-anchor="middle" fill="#94a3b8" font-size="10">流量親和律</text>
+
+            <text x="362" y="150" text-anchor="start" fill="#10b981" font-size="12" font-weight="600">R2</text>
+            <text x="362" y="162" text-anchor="start" fill="#94a3b8" font-size="10">功率親和律</text>
+
+            <text x="300" y="338" text-anchor="middle" fill="#10b981" font-size="12" font-weight="600">R3</text>
+            <text x="300" y="350" text-anchor="middle" fill="#94a3b8" font-size="10">58.5Hz禁區</text>
+
+            <text x="100" y="338" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="600">R4</text>
+            <text x="100" y="350" text-anchor="middle" fill="#94a3b8" font-size="10">Darcy管損</text>
+
+            <text x="38" y="150" text-anchor="end" fill="#a7f3d0" font-size="12" font-weight="600">R5</text>
+            <text x="38" y="162" text-anchor="end" fill="#94a3b8" font-size="10">空蝕邊界</text>
+
+            <!-- Center label -->
+            <circle cx="200" cy="200" r="3" fill="#cbd5e1"/>
+          </svg>
+        </div>
+        <div class="flex justify-center gap-5 mt-2 text-xs text-slate-600">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:rgba(16,185,129,0.10);border:1px solid #10b981;"></span>實際合規</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 border-t border-dashed border-emerald-600"></span>目標 100%</span>
+        </div>
+      </div>
+
+      <!-- Physics Equations Panel -->
+      <div class="glass p-5">
+        <h2 class="text-base font-semibold text-slate-700 mb-1">物理方程式</h2>
+        <p class="text-xs text-slate-500 mb-4">PINNs 殘差約束定義</p>
+        <div class="space-y-3">
+
+          <!-- R1 -->
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">R1</span>
+              <span class="text-xs text-slate-500">流量親和律</span>
+            </div>
+            <div class="eq-block">
+              <span class="eq-label">Q_model / Q_rated</span> = <span class="eq-label">n / n_rated</span><br/>
+              <span class="eq-comment"># Q ∝ n  (first affinity law)</span><br/>
+              residual_R1 = |Q_pred / Q_r - hz / hz_r|
+            </div>
+          </div>
+
+          <!-- R2 -->
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">R2</span>
+              <span class="text-xs text-slate-500">功率親和律</span>
+            </div>
+            <div class="eq-block">
+              <span class="eq-label">P_model / P_rated</span> = <span class="eq-label">(n / n_rated)³</span><br/>
+              <span class="eq-comment"># P ∝ n³  (third affinity law)</span><br/>
+              residual_R2 = |P_pred / P_r - (hz / hz_r)^3|
+            </div>
+          </div>
+
+          <!-- R3 -->
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">R3</span>
+              <span class="text-xs text-slate-500">58.5 Hz 共振禁區</span>
+            </div>
+            <div class="eq-block">
+              penalty_R3 = max(0, <span class="eq-label">hz - 58.5</span>)<br/>
+              <span class="eq-comment"># Hard constraint: hz ≤ 58.5 Hz</span><br/>
+              residual_R3 = penalty_R3 * w_forbidden
+            </div>
+          </div>
+
+          <!-- R4 -->
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-xs font-bold" style="color:#047857;background:#f0fdf4;border:1px solid #bbf7d0;padding:2px 8px;border-radius:4px;">R4</span>
+              <span class="text-xs text-slate-500">Darcy-Weisbach 管損</span>
+            </div>
+            <div class="eq-block">
+              η = η_ideal × (1 - k_loss × <span class="eq-label">(Q/Q_r - Q_bep/Q_r)²</span>)<br/>
+              <span class="eq-comment"># Off-BEP efficiency penalty</span><br/>
+              residual_R4 = |η_pred - η_darcy(Q, Q_bep)|
+            </div>
+          </div>
+
+          <!-- R5 -->
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-xs font-bold" style="color:#059669;background:#ecfdf5;border:1px solid #a7f3d0;padding:2px 8px;border-radius:4px;">R5</span>
+              <span class="text-xs text-slate-500">空蝕邊界條件</span>
+            </div>
+            <div class="eq-block">
+              cav_factor = clamp(<span class="eq-label">(hz - min_hz) / 3.0</span>, 0, 1)<br/>
+              <span class="eq-comment"># Cavitation protection: hz ≥ min_hz + 3</span><br/>
+              residual_R5 = (1 - cav_factor) × w_cavitation
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION 4: Combo Comparison Table ─────────────── -->
+    <section class="glass overflow-hidden">
+      <div class="px-5 py-4 border-b" style="border-color: #e2e8f0">
+        <h2 class="text-base font-semibold text-slate-700">Combo 方案物理合規對比</h2>
+        <p class="text-xs text-slate-500 mt-0.5">R4 Darcy 管損 / R5 空蝕邊界 合規率</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b" style="border-color: #e2e8f0">
+              <th class="text-left px-5 py-3 text-slate-500 font-medium">方案</th>
+              <th class="text-right px-5 py-3 text-slate-500 font-medium">R1 流量</th>
+              <th class="text-right px-5 py-3 text-slate-500 font-medium">R2 功率</th>
+              <th class="text-right px-5 py-3 text-slate-500 font-medium">R3 禁區</th>
+              <th class="text-right px-5 py-3 text-slate-500 font-medium">R4 Darcy</th>
+              <th class="text-right px-5 py-3 text-slate-500 font-medium">R5 空蝕</th>
+              <th class="text-left px-5 py-3 text-slate-500 font-medium">備註</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="combo in combos" :key="combo.name">
+              <tr class="border-b transition-colors" style="border-color: #f1f5f9"
+                :class="combo.active ? 'bg-emerald-50' : 'bg-white'">
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-2">
+                    <span :class="combo.active ? 'text-emerald-700 font-semibold' : 'text-slate-700'" x-text="combo.name"></span>
+                    <span x-show="combo.active" class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">當前</span>
+                  </div>
+                </td>
+                <td class="px-5 py-3 text-right mono" :class="combo.r1 >= 100 ? 'text-emerald-600' : 'text-amber-600'"
+                  x-text="combo.r1 + '%'"></td>
+                <td class="px-5 py-3 text-right mono" :class="combo.r2 >= 100 ? 'text-emerald-600' : 'text-amber-600'"
+                  x-text="combo.r2 + '%'"></td>
+                <td class="px-5 py-3 text-right mono" :class="combo.r3 >= 100 ? 'text-emerald-600' : 'text-amber-600'"
+                  x-text="combo.r3 + '%'"></td>
+                <td class="px-5 py-3 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <div class="w-14 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                      <div class="h-full rounded-full bg-emerald-400" :style="`width:${combo.r4}%`"></div>
+                    </div>
+                    <span class="mono text-xs" :class="combo.r4 >= 100 ? 'text-emerald-600' : 'text-amber-600'"
+                      x-text="combo.r4 + '%'"></span>
+                  </div>
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <div class="w-14 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                      <div class="h-full rounded-full bg-emerald-400" :style="`width:${combo.r5}%`"></div>
+                    </div>
+                    <span class="mono text-xs" :class="combo.r5 >= 100 ? 'text-emerald-600' : 'text-amber-600'"
+                      x-text="combo.r5 + '%'"></span>
+                  </div>
+                </td>
+                <td class="px-5 py-3 text-xs text-slate-500" x-text="combo.notes"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Bottom Bar ── -->
+  <nav style="border-top:1px solid #e2e8f0;display:flex;align-items:center;padding:0 20px;gap:6px;background:#1a3566;position:sticky;bottom:0;z-index:50;height:52px;flex-shrink:0;">
+    <a href="index.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">主控台</a>
+    <a href="schedule.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">24h 排程</a>
+    <a href="cost.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">電費分析</a>
+    <a href="pump.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">抽水機狀態</a>
+    <a href="history.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">歷史紀錄</a>
+    <a href="physics.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(16,185,129,0.45);color:#10b981;background:rgba(16,185,129,0.15);text-decoration:none;white-space:nowrap;">PINNs 物理</a>
+    <a href="pareto.html" style="padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.20);color:rgba(255,255,255,0.70);text-decoration:none;white-space:nowrap;">Pareto 分析</a>
+    <span style="margin-left:auto;font-size:11px;color:rgba(255,255,255,0.45);font-family:monospace;">Combo 04 · PINNs-MPC · v3.2</span>
+  </nav>
+
+  <script>
+    function physicsApp() {
+      return {
+        apiLoaded: false,
+        residuals: {
+          R1: { compliance: 100.0, mean_residual: '2.1e-5', description: '流量親和律' },
+          R2: { compliance: 100.0, mean_residual: '1.8e-5', description: '功率親和律' },
+          R3: { compliance: 100.0, mean_residual: '0.0000', description: '58.5Hz禁區' },
+          R4: { compliance: 98.5,  mean_residual: '3.4e-3', description: 'Darcy管損' },
+          R5: { compliance: 99.3,  mean_residual: '1.2e-3', description: '空蝕邊界' },
+        },
+        combos: [
+          {
+            name: 'combo_02 PINNs-MILP',
+            r1: 99.2, r2: 98.7, r3: 100.0, r4: 98.5, r5: 99.3,
+            notes: 'PyTorch PINNs · MILP 線性規劃',
+            active: false,
+          },
+          {
+            name: 'combo_04 PINNs-MPC',
+            r1: 100.0, r2: 100.0, r3: 100.0, r4: 100.0, r5: 100.0,
+            notes: 'sklearn v2 · MPC 滾動最佳化',
+            active: true,
+          },
+        ],
+
+        async init() {
+          try {
+            const res = await fetch('/api/physics');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.fallback) {
+                // Use fallback from backend
+                const fb = data.fallback;
+                this.residuals.R1.compliance = fb.R1_affinity_law?.compliance ?? 100.0;
+                this.residuals.R2.compliance = fb.R2_energy_conservation?.compliance ?? 100.0;
+                this.residuals.R3.compliance = fb.R3_monotonicity?.compliance ?? 100.0;
+                this.residuals.R4.compliance = fb.R4_pipe_loss?.compliance ?? 98.5;
+                this.residuals.R5.compliance = fb.R5_cavitation?.compliance ?? 99.3;
+              } else if (data.R4_pipe_loss) {
+                this.residuals.R4.compliance = data.R4_pipe_loss.compliance ?? 98.5;
+                this.residuals.R5.compliance = data.R5_cavitation?.compliance ?? 99.3;
+                this.apiLoaded = true;
+              }
+            }
+          } catch (e) {
+            console.warn('[physics] API unavailable, using defaults');
+          }
+        },
+      };
+    }
+  </script>
+  <script src="transitions.js"></script>
+</body>
+</html>
