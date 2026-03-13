@@ -315,11 +315,13 @@ class MPCOptimizer:
                 continue
             # 使用快取
             if pid in self._pump_cache and hz in self._pump_cache[pid]:
-                flow, power, _ = self._pump_cache[pid][hz]
+                flow, shaft_power, eff = self._pump_cache[pid][hz]
             else:
-                flow, power, _ = self.surrogate.predict(pid, hz)
+                flow, shaft_power, eff = self.surrogate.predict(pid, hz)
+            # 電功率 = 軸功率 / 效率（BEP 偏離時效率下降，電功率正確提高）
+            electrical_power = shaft_power / max(eff, 0.05)
             total_flow += flow
-            total_power += power
+            total_power += electrical_power
 
         # 電費成本
         rate = HOURLY_RATE.get(hour % 24, 2.5)
