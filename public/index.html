@@ -278,7 +278,7 @@
     /* ─── Metrics row ─── */
     .metrics-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1.4fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr 1.4fr;
       gap: 10px;
     }
     .metric-card {
@@ -714,7 +714,6 @@
                 <div class="metric-label">日耗電量</div>
                 <div class="metric-value" x-text="formatNum(result.energy_kwh)"></div>
                 <div class="metric-unit">kWh / 日</div>
-                <div style="margin-top:6px;font-size:11px;color:#94a3b8;" x-text="'SEC：' + result.sec.toFixed(4) + ' kWh/m³'"></div>
               </div>
 
               <!-- CO2 -->
@@ -723,6 +722,14 @@
                 <div class="metric-value" x-text="formatNum(result.co2_kg)"></div>
                 <div class="metric-unit">kg / 日</div>
                 <div style="margin-top:6px;font-size:11px;color:#94a3b8;">係數 0.494 kg/kWh</div>
+              </div>
+
+              <!-- 抽水能耗 SEC -->
+              <div class="glass metric-card fade-in fade-in-delay-3">
+                <div class="metric-label">抽水能耗</div>
+                <div class="metric-value" x-text="result.sec.toFixed(4)"></div>
+                <div class="metric-unit">kWh / 噸水</div>
+                <div style="margin-top:6px;font-size:11px;color:#94a3b8;">SEC 能效指標</div>
               </div>
 
               <!-- 年化節費 -->
