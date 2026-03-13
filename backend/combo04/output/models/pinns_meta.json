@@ -1,0 +1,57 @@
+{
+  "combo": "combo_04_PINNs-MPC-DynamicBL",
+  "model_type": "PINNs_sklearn_with_affinity_correction",
+  "physics_lambda": 0.4,
+  "config": {
+    "hidden_layers": [
+      64,
+      128,
+      128,
+      64
+    ],
+    "training_points": 3000,
+    "bep_dense_ratio": 0.3
+  },
+  "metrics": {
+    "P1": {
+      "nn_rmse_flow_m3h": 76.419,
+      "nn_rmse_power_kw": 2.584,
+      "physics_residual_flow_pct": 0.17,
+      "physics_residual_power_pct": 0.45,
+      "n_train": 3000,
+      "n_iterations": 48
+    },
+    "P2": {
+      "nn_rmse_flow_m3h": 40.077,
+      "nn_rmse_power_kw": 1.262,
+      "physics_residual_flow_pct": 0.21,
+      "physics_residual_power_pct": 0.27,
+      "n_train": 3000,
+      "n_iterations": 71
+    },
+    "P3": {
+      "nn_rmse_flow_m3h": 37.968,
+      "nn_rmse_power_kw": 1.223,
+      "physics_residual_flow_pct": 0.21,
+      "physics_residual_power_pct": 0.27,
+      "n_train": 3000,
+      "n_iterations": 71
+    },
+    "P4": {
+      "nn_rmse_flow_m3h": 35.859,
+      "nn_rmse_power_kw": 1.184,
+      "physics_residual_flow_pct": 0.21,
+      "physics_residual_power_pct": 0.27,
+      "n_train": 3000,
+      "n_iterations": 71
+    },
+    "P5": {
+      "nn_rmse_flow_m3h": 70.63,
+      "nn_rmse_power_kw": 2.312,
+      "physics_residual_flow_pct": 0.21,
+      "physics_residual_power_pct": 0.38,
+      "n_train": 3000,
+      "n_iterations": 71
+    }
+  }
+}
