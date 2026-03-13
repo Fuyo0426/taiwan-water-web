@@ -476,7 +476,7 @@
 
         async init() {
           try {
-            const res = await fetch('/api/physics');
+            const res = await fetch('https://backend-production-48605.up.railway.app/api/physics');
             if (res.ok) {
               const data = await res.json();
               if (data.fallback) {

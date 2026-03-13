@@ -493,7 +493,7 @@
 
         async init() {
           try {
-            const res = await fetch('/api/pareto');
+            const res = await fetch('https://backend-production-48605.up.railway.app/api/pareto');
             if (res.ok) {
               const data = await res.json();
               const raw = data.fallback || data.solutions || [];

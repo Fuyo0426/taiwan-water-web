@@ -1036,7 +1036,7 @@
               date:         this.params.date,
             };
 
-            const resp = await fetch('/api/optimize', {
+            const resp = await fetch('https://backend-production-48605.up.railway.app/api/optimize', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),

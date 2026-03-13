@@ -1185,7 +1185,7 @@
         this.loading = true;
         this.dataLoaded = false;
         try {
-          const res = await fetch(`/api/schedule?date=${this.selectedDate}`);
+          const res = await fetch(`https://backend-production-48605.up.railway.app/api/schedule?date=${this.selectedDate}`);
           if (!res.ok) throw new Error('API error');
           const data = await res.json();
           // Expect data.schedule = 24-element array of [p1,p2,p3,p4,p5]

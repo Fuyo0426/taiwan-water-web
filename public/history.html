@@ -363,7 +363,7 @@
 
         async init() {
           try {
-            const res = await fetch('/api/history');
+            const res = await fetch('https://backend-production-48605.up.railway.app/api/history');
             if (res.ok) {
               const data = await res.json();
               if (data.records && data.records.length > 0) {
